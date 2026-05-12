@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import * as nodemailer from "nodemailer";
+import { resolvePublicUrl } from '../utils/public-url.util';
 
 @Injectable()
 export class MailService {
@@ -17,7 +18,8 @@ export class MailService {
   }
 
   async sendVerifyEmail(email: string, token: string) {
-    const link = `${process.env.BACKEND_URL}/auth/verify-email?token=${token}`;
+    const backend = resolvePublicUrl(process.env.BACKEND_URL, process.env.FRONTEND_URL);
+    const link = `${backend}/auth/verify-email?token=${token}`;
 
     await this.transporter.sendMail({
       from: process.env.MAIL_FROM,
@@ -46,7 +48,8 @@ export class MailService {
   }
 
   async sendResetPasswordEmail(email: string, token: string) {
-    const link = `${process.env.FRONTEND_URL}/reset-password?token=${encodeURIComponent(token)}`;
+    const frontend = resolvePublicUrl(process.env.FRONTEND_URL, process.env.BACKEND_URL);
+    const link = `${frontend}/reset-password?token=${encodeURIComponent(token)}`;
 
     await this.transporter.sendMail({
       from: process.env.MAIL_FROM,
@@ -64,7 +67,8 @@ export class MailService {
   }
 
   async sendTaskerAccountCreatedEmail(email: string, fullName: string, tempPassword: string) {
-    const loginLink = `${process.env.FRONTEND_URL}/login`;
+    const frontend = resolvePublicUrl(process.env.FRONTEND_URL, process.env.BACKEND_URL);
+    const loginLink = `${frontend}/login`;
 
     console.log('📧 Gửi email tasker mới tới:', email);
 
@@ -104,7 +108,8 @@ export class MailService {
     orderId: string,
     serviceName: string
   ) {
-    const orderLink = `${process.env.FRONTEND_URL}/orders/${orderId}`;
+    const frontend = resolvePublicUrl(process.env.FRONTEND_URL, process.env.BACKEND_URL);
+    const orderLink = `${frontend}/orders/${orderId}`;
 
     await this.transporter.sendMail({
       from: process.env.MAIL_FROM,
@@ -145,7 +150,8 @@ export class MailService {
     totalPrice: number,
     billHtml: string
   ) {
-    const orderLink = `${process.env.FRONTEND_URL}/orders/${orderId}`;
+    const frontend = resolvePublicUrl(process.env.FRONTEND_URL, process.env.BACKEND_URL);
+    const orderLink = `${frontend}/orders/${orderId}`;
     const formattedPrice = new Intl.NumberFormat('vi-VN', {
       style: 'currency',
       currency: 'VND',

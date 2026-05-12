@@ -17,7 +17,7 @@ async function bootstrap() {
   );
 
   const envOrigins = (process.env.FRONTEND_URL || '')
-    .split(',')
+    .split(/[\s,]+/)
     .map((origin) => origin.trim())
     .filter(Boolean);
 

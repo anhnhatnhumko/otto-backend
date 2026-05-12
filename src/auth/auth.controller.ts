@@ -1,5 +1,6 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Patch, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
+import { resolvePublicUrl } from '../utils/public-url.util';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -72,18 +73,13 @@ export class AuthController {
     try {
       const { email } = await this.authService.verifyEmail(token);
 
-      return res.redirect(
-        `${process.env.FRONTEND_URL}/verify-email/success?email=${encodeURIComponent(
-          email,
-        )}`,
-      );
+      const frontend = resolvePublicUrl(process.env.FRONTEND_URL, process.env.BACKEND_URL);
+      return res.redirect(`${frontend}/verify-email/success?email=${encodeURIComponent(email)}`);
     } catch (error: any) {
       const email = error?.response?.email;
 
-      return res.redirect(
-        `${process.env.FRONTEND_URL}/verify-email/error${email ? `?email=${encodeURIComponent(email)}` : ''
-        }`,
-      );
+      const frontend = resolvePublicUrl(process.env.FRONTEND_URL, process.env.BACKEND_URL);
+      return res.redirect(`${frontend}/verify-email/error${email ? `?email=${encodeURIComponent(email)}` : ''}`);
     }
   }
 

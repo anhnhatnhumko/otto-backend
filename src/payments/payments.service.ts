@@ -111,9 +111,18 @@ export class PaymentService {
       throw new BadRequestException('Missing Stripe session id');
     }
 
+    console.log('[payments] confirmStripeSession called for', sessionId);
+
     const session = await this.stripeService.retrieveCheckoutSession(sessionId);
+    console.log('[payments] stripe session:', {
+      id: session.id,
+      payment_status: session.payment_status,
+      amount_total: session.amount_total,
+      metadata: session.metadata,
+    });
 
     if (session.payment_status !== 'paid') {
+      console.warn('[payments] stripe session not paid yet', session.payment_status);
       throw new BadRequestException('Stripe session is not paid');
     }
 
@@ -123,7 +132,9 @@ export class PaymentService {
       throw new BadRequestException('Missing Stripe metadata');
     }
 
+    console.log('[payments] calling orchestrator.handleStripeSuccess for metadata', metadata);
     await this.paymentOrchestrator.handleStripeSuccess(metadata);
+    console.log('[payments] orchestrator.handleStripeSuccess returned');
 
     switch (metadata.type) {
       case 'ORDER':

@@ -78,7 +78,6 @@ export class AuthService {
       mustChangePassword: boolean;
     };
   }> {
-    console.log("SIGN SECRET:", process.env.JWT_SECRET);
     const user = await this.userModel.findOne({ email: dto.email });
 
     if (!user) {

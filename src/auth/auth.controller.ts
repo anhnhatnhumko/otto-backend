@@ -25,13 +25,15 @@ export class AuthController {
   // }
 
   private getCookieOptions() {
-  return {
-    httpOnly: true,
-    sameSite: 'none' as const,
-    secure: true,
-    maxAge: 24 * 60 * 60 * 1000,
-  };
-}
+    const isProduction = process.env.NODE_ENV === 'production';
+
+    return {
+      httpOnly: true,
+      sameSite: (isProduction ? 'none' : 'lax') as 'none' | 'lax',
+      secure: isProduction,
+      maxAge: 24 * 60 * 60 * 1000,
+    };
+  }
 
   @Post('register')
   register(@Body() dto: RegisterDto) {

@@ -2,7 +2,6 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
-import mongoose from 'mongoose';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { rawBody: true });
@@ -43,24 +42,10 @@ async function bootstrap() {
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
-  mongoose.connection.on('connected', () => {
-    console.log('======================');
-    console.log('MongoDB Connected');
-    console.log('HOST:', mongoose.connection.host);
-    // console.log('DB:', mongoose.connection.db.databaseName);
-    console.log('URI:', process.env.MONGODB_URI);
-    console.log('======================');
-  });
-
-  mongoose.connection.on('error', (err) => {
-    console.log('Mongo Error:', err);
-  });
-
   const port = Number(process.env.PORT) || 9999;
 
   await app.listen(port, '0.0.0.0');
 
   console.log(`Server running on ${port}`);
 }
-
 bootstrap();

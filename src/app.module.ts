@@ -21,29 +21,42 @@ import { TaskerModule } from './tasker/tasker.module';
       isGlobal: true,
     }),
 
-    MongooseModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        uri: config.get<string>('MONGO_URI'),
-      }),
+    // MongooseModule.forRootAsync({
+    //   imports: [ConfigModule],
+    //   inject: [ConfigService],
+    //   useFactory: (config: ConfigService) => ({
+    //     uri: config.get<string>('MONGO_URI'),
+    //   }),
+    // }),
+    MongooseModule.forRoot(process.env.MONGODB_URI!, {
+      connectionFactory: (connection) => {
+        console.log('======================');
+        console.log('Mongo Connected');
+        console.log('HOST:', connection.host);
+        console.log('DB:', connection.name);
+        console.log('READY STATE:', connection.readyState);
+        console.log('URI:', process.env.MONGODB_URI);
+        console.log('======================');
+
+        return connection;
+      },
     }),
 
-    ScheduleModule.forRoot(),
-    AuthModule,
-    // Notifications
-    NotificationsModule,
-    OrdersModule,
-    ServicesModule,
-    LocationsModule,
-    PaymentModule,
-    UploadModule,
-    UserModule,
-    AdminModule,
-    TaskerModule,
-    // Chat
-    ChatModule,
-    CustomersModule,
+      ScheduleModule.forRoot(),
+      AuthModule,
+      // Notifications
+      NotificationsModule,
+      OrdersModule,
+      ServicesModule,
+      LocationsModule,
+      PaymentModule,
+      UploadModule,
+      UserModule,
+      AdminModule,
+      TaskerModule,
+      // Chat
+      ChatModule,
+      CustomersModule,
   ],
 })
 export class AppModule { }

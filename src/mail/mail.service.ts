@@ -13,6 +13,17 @@ export class MailService implements OnModuleInit {
   constructor() {
     const port = Number(process.env.MAIL_PORT || 587);
     const secure = port === 465;
+    if (!process.env.MAIL_HOST) {
+      throw new Error('Missing MAIL_HOST');
+    }
+
+    if (!process.env.MAIL_USER) {
+      throw new Error('Missing MAIL_USER');
+    }
+
+    if (!process.env.MAIL_PASS) {
+      throw new Error('Missing MAIL_PASS');
+    }
 
     const transportConfig: SMTPTransport.Options = {
       host: process.env.MAIL_HOST,

@@ -24,6 +24,7 @@ async function bootstrap() {
   const allowedOrigins = new Set([
     'http://localhost:3000',
     'http://localhost:3001',
+    'http://alert-enjoyment-production-5414.up.railway.app',
     ...envOrigins,
   ]);
 

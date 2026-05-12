@@ -36,6 +36,15 @@ export class MailService implements OnModuleInit {
     };
 
     this.defaultFrom = process.env.MAIL_FROM || process.env.MAIL_USER || 'no-reply@otto.local';
+    
+    console.log('[MailService] Initializing with config:', {
+      host: process.env.MAIL_HOST,
+      port,
+      secure,
+      user: process.env.MAIL_USER,
+      from: this.defaultFrom,
+    });
+    
     this.transporter = nodemailer.createTransport(transportConfig);
   }
 
@@ -50,6 +59,7 @@ export class MailService implements OnModuleInit {
 
   private async sendMailWithLogging(options: Mail.Options, tag: string) {
     try {
+      this.logger.log(`[${tag}] Sending email to=${options.to} from=${this.defaultFrom}`);
       const info = await this.transporter.sendMail({
         from: this.defaultFrom,
         ...options,
@@ -58,7 +68,9 @@ export class MailService implements OnModuleInit {
       this.logger.log(`[${tag}] Mail sent: messageId=${info.messageId} to=${options.to}`);
       return info;
     } catch (error) {
-      this.logger.error(`[${tag}] Mail send failed to=${options.to}`, error instanceof Error ? error.stack : String(error));
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`[${tag}] Mail send failed to=${options.to} error=${errorMsg}`);
+      this.logger.error(`[${tag}] Stack:`, error instanceof Error ? error.stack : '');
       throw error;
     }
   }

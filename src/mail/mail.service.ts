@@ -50,10 +50,13 @@ export class MailService implements OnModuleInit {
 
   async onModuleInit() {
     try {
+      this.logger.log('[MailService] Bắt đầu xác thực SMTP...');
       await this.transporter.verify();
-      this.logger.log('SMTP connection verified successfully');
+      this.logger.log('[MailService] ✅ Xác thực SMTP thành công');
     } catch (error) {
-      this.logger.error('SMTP verify failed', error instanceof Error ? error.stack : String(error));
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`[MailService] ❌ Xác thực SMTP thất bại: ${errorMsg}`);
+      this.logger.error(`[MailService] Chi tiết:`, error instanceof Error ? error.stack : '');
     }
   }
 
@@ -77,7 +80,17 @@ export class MailService implements OnModuleInit {
 
   async sendVerifyEmail(email: string, token: string) {
     const backend = resolvePublicUrl(process.env.BACKEND_URL, process.env.FRONTEND_URL);
+    
+    if (!backend) {
+      this.logger.error('[verify-email] Không thể resolve BACKEND_URL', {
+        BACKEND_URL: process.env.BACKEND_URL,
+        FRONTEND_URL: process.env.FRONTEND_URL,
+      });
+      throw new Error('Không thể tạo link email - BACKEND_URL chưa được cấu hình');
+    }
+    
     const link = `${backend}/auth/verify-email?token=${token}`;
+    this.logger.log(`[verify-email] Link: ${link}`);
 
     await this.sendMailWithLogging({
       to: email,

@@ -1,28 +1,62 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import * as nodemailer from "nodemailer";
 import { resolvePublicUrl } from '../utils/public-url.util';
+import type SMTPTransport from 'nodemailer/lib/smtp-transport';
+import type Mail from 'nodemailer/lib/mailer';
 
 @Injectable()
-export class MailService {
-  private transporter;
+export class MailService implements OnModuleInit {
+  private readonly logger = new Logger(MailService.name);
+  private transporter: Mail;
+  private defaultFrom: string;
+
   constructor() {
-    this.transporter = nodemailer.createTransport({
+    const port = Number(process.env.MAIL_PORT || 587);
+    const secure = port === 465;
+
+    const transportConfig: SMTPTransport.Options = {
       host: process.env.MAIL_HOST,
-      port: Number(process.env.MAIL_PORT),
-      secure: false, // true nếu port 465
+      port,
+      secure,
       auth: {
         user: process.env.MAIL_USER,
         pass: process.env.MAIL_PASS,
       },
-    });
+    };
+
+    this.defaultFrom = process.env.MAIL_FROM || process.env.MAIL_USER || 'no-reply@otto.local';
+    this.transporter = nodemailer.createTransport(transportConfig);
+  }
+
+  async onModuleInit() {
+    try {
+      await this.transporter.verify();
+      this.logger.log('SMTP connection verified successfully');
+    } catch (error) {
+      this.logger.error('SMTP verify failed', error instanceof Error ? error.stack : String(error));
+    }
+  }
+
+  private async sendMailWithLogging(options: Mail.Options, tag: string) {
+    try {
+      const info = await this.transporter.sendMail({
+        from: this.defaultFrom,
+        ...options,
+      });
+
+      this.logger.log(`[${tag}] Mail sent: messageId=${info.messageId} to=${options.to}`);
+      return info;
+    } catch (error) {
+      this.logger.error(`[${tag}] Mail send failed to=${options.to}`, error instanceof Error ? error.stack : String(error));
+      throw error;
+    }
   }
 
   async sendVerifyEmail(email: string, token: string) {
     const backend = resolvePublicUrl(process.env.BACKEND_URL, process.env.FRONTEND_URL);
     const link = `${backend}/auth/verify-email?token=${token}`;
 
-    await this.transporter.sendMail({
-      from: process.env.MAIL_FROM,
+    await this.sendMailWithLogging({
       to: email,
       subject: "Xác thực email Otto",
       html: `
@@ -31,12 +65,11 @@ export class MailService {
       <a href="${link}">Xác thực email</a>
       <p>Link hết hạn sau 15 phút</p>
     `,
-    });
+    }, 'verify-email');
   }
 
   async sendOtpEmail(email: string, otp: string) {
-    await this.transporter.sendMail({
-      from: process.env.MAIL_FROM,
+    await this.sendMailWithLogging({
       to: email,
       subject: 'OTP xác nhận thanh toán OTTO',
       html: `
@@ -45,15 +78,14 @@ export class MailService {
       <h1>${otp}</h1>
       <p>Hết hạn sau 5 phút</p>
     `,
-    });
+    }, 'otp-payment');
   }
 
   async sendResetPasswordEmail(email: string, token: string) {
     const frontend = resolvePublicUrl(process.env.FRONTEND_URL, process.env.BACKEND_URL);
     const link = `${frontend}/reset-password?token=${encodeURIComponent(token)}`;
 
-    await this.transporter.sendMail({
-      from: process.env.MAIL_FROM,
+    await this.sendMailWithLogging({
       to: email,
       subject: 'Đặt lại mật khẩu Otto',
       html: `
@@ -64,7 +96,7 @@ export class MailService {
       <p>Liên kết hết hạn sau 15 phút.</p>
       <p>Nếu bạn không thực hiện yêu cầu này, hãy bỏ qua email.</p>
     `,
-    });
+    }, 'reset-password');
   }
 
   async sendTaskerAccountCreatedEmail(email: string, fullName: string, tempPassword: string) {
@@ -73,8 +105,7 @@ export class MailService {
 
     console.log('📧 Gửi email tasker mới tới:', email);
 
-    await this.transporter.sendMail({
-      from: process.env.MAIL_FROM,
+    await this.sendMailWithLogging({
       to: email,
       subject: 'Tài khoản Tasker ở Otto của bạn đã được tạo',
       html: `
@@ -97,7 +128,7 @@ export class MailService {
       <p>Nếu bạn có bất kỳ câu hỏi nào, vui lòng liên hệ với chúng tôi.</p>
       <p>Cảm ơn bạn đã gia nhập Otto! 🙏</p>
     `,
-    });
+    }, 'tasker-account-created');
 
     console.log('✅ Email tasker mới đã gửi thành công tới:', email);
   }
@@ -112,8 +143,7 @@ export class MailService {
     const frontend = resolvePublicUrl(process.env.FRONTEND_URL, process.env.BACKEND_URL);
     const orderLink = `${frontend}/orders/${orderId}`;
 
-    await this.transporter.sendMail({
-      from: process.env.MAIL_FROM,
+    await this.sendMailWithLogging({
       to: email,
       subject: `✅ Đơn hàng "${serviceName}" của bạn đã được nhận`,
       html: `
@@ -139,7 +169,7 @@ export class MailService {
         <p style="color: #6b7280; font-size: 12px; text-align: center;">Cảm ơn bạn đã sử dụng Otto! 🙏</p>
       </div>
       `,
-    });
+    }, 'order-accepted');
   }
 
   async sendOrderCompletedEmail(
@@ -158,8 +188,7 @@ export class MailService {
       currency: 'VND',
     }).format(totalPrice);
 
-    await this.transporter.sendMail({
-      from: process.env.MAIL_FROM,
+    await this.sendMailWithLogging({
       to: email,
       subject: `🎉 Đơn hàng "${serviceName}" của bạn đã hoàn thành`,
       html: `
@@ -196,6 +225,6 @@ export class MailService {
         <p style="color: #6b7280; font-size: 12px; text-align: center;">Cảm ơn bạn đã sử dụng Otto! 🙏</p>
       </div>
       `,
-    });
+    }, 'order-completed');
   }
 }

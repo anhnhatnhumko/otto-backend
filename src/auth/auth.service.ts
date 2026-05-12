@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
@@ -56,7 +57,9 @@ export class AuthService {
     try {
       await this.mailService.sendVerifyEmail(user.email, verifyToken);
     } catch (error) {
-      console.error('Failed to send verify email after register:', error);
+      throw new ServiceUnavailableException(
+        'Đăng ký thành công nhưng gửi email xác thực thất bại. Vui lòng thử lại sau.',
+      );
     }
 
     return {

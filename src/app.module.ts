@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ConfigModule } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from './auth/auth.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -15,6 +15,12 @@ import { ChatModule } from './chat/chat.module';
 import { CustomersModule } from './customers/customers.module';
 import { TaskerModule } from './tasker/tasker.module';
 
+const mongoUri = process.env.MONGODB_URI || process.env.MONGO_URI;
+
+if (!mongoUri) {
+  throw new Error('Missing MongoDB connection string. Set MONGODB_URI or MONGO_URI.');
+}
+
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -28,14 +34,14 @@ import { TaskerModule } from './tasker/tasker.module';
     //     uri: config.get<string>('MONGO_URI'),
     //   }),
     // }),
-    MongooseModule.forRoot(process.env.MONGODB_URI!, {
+    MongooseModule.forRoot(mongoUri, {
       connectionFactory: (connection) => {
         console.log('======================');
         console.log('Mongo Connected');
         console.log('HOST:', connection.host);
         console.log('DB:', connection.name);
         console.log('READY STATE:', connection.readyState);
-        console.log('URI:', process.env.MONGODB_URI);
+        console.log('URI source:', process.env.MONGODB_URI ? 'MONGODB_URI' : 'MONGO_URI');
         console.log('======================');
 
         return connection;

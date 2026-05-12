@@ -36,6 +36,7 @@ export class MailService {
 
   async sendOtpEmail(email: string, otp: string) {
     await this.transporter.sendMail({
+      from: process.env.MAIL_FROM,
       to: email,
       subject: 'OTP xác nhận thanh toán OTTO',
       html: `

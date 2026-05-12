@@ -12,6 +12,17 @@ import { JwtAuthGuard } from '../common/guards/jwt.guard';
 export class AuthController {
   constructor(private authService: AuthService) { }
 
+  private getCookieOptions() {
+    const isProduction = process.env.NODE_ENV === 'production';
+
+    return {
+      httpOnly: true,
+      sameSite: (isProduction ? 'none' : 'lax') as 'none' | 'lax',
+      secure: isProduction,
+      maxAge: 24 * 60 * 60 * 1000,
+    };
+  }
+
   @Post('register')
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
@@ -26,11 +37,7 @@ export class AuthController {
     const { accessToken, user } =
       await this.authService.login(dto);
 
-    res.cookie('accessToken', accessToken, {
-      httpOnly: true,
-      sameSite: 'lax',
-      maxAge: 24 * 60 * 60 * 1000,
-    });
+    res.cookie('accessToken', accessToken, this.getCookieOptions());
 
     return {
       message: 'Login successful',
@@ -41,10 +48,9 @@ export class AuthController {
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   logout(@Res({ passthrough: true }) res: Response) {
-    res.clearCookie('accessToken', {
-      httpOnly: true,
-      sameSite: 'lax',
-    });
+    const { maxAge: _maxAge, ...clearOptions } = this.getCookieOptions();
+
+    res.clearCookie('accessToken', clearOptions);
 
     return { message: 'Logout successful' };
   }

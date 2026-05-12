@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { rawBody: true });
+
   app.use(cookieParser());
 
   app.useGlobalPipes(
@@ -15,25 +16,35 @@ async function bootstrap() {
     }),
   );
 
+  const envOrigins = (process.env.FRONTEND_URL || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  const allowedOrigins = new Set([
+    'http://localhost:3000',
+    'http://localhost:3001',
+    ...envOrigins,
+  ]);
+
   app.enableCors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.has(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error(`CORS blocked for origin: ${origin}`), false);
+    },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
-  await app.listen(process.env.PORT ?? 9999, '0.0.0.0');
+  const port = Number(process.env.PORT) || 9999;
+
+  await app.listen(port, '0.0.0.0');
+
+  console.log(`Server running on ${port}`);
 }
 bootstrap();
-
-// async function bootstrap() {
-//   const app = await NestFactory.create(AppModule);
-
-//   app.enableCors({
-//     origin: true,
-//     credentials: true,
-//   });
-
-//   const port = process.env.PORT || 9999;
-
-//   await app.listen(port, '0.0.0.0');
-// }
-// bootstrap();

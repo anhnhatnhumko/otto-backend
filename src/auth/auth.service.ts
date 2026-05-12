@@ -53,7 +53,7 @@ export class AuthService {
       emailVerifyExpires: new Date(Date.now() + 15 * 60 * 1000),
     });
 
-    await this.mailService.sendVerifyEmail(user.email, verifyToken);
+    // await this.mailService.sendVerifyEmail(user.email, verifyToken);
 
     return {
       message: 'Đăng ký thành công! Vui lòng kiểm tra email để xác thực.',

@@ -25,6 +25,7 @@ async function bootstrap() {
     'http://localhost:3000',
     'http://localhost:3001',
     'https://alert-enjoyment-production-5414.up.railway.app',
+    'http://ottohome.online',
     ...envOrigins,
   ]);
 

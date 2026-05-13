@@ -841,16 +841,76 @@ export class OrdersService {
     }
 
     if (
-      order.status === OrderStatus.COMPLETED ||
-      order.status === OrderStatus.IN_PROGRESS
+      order.status !== OrderStatus.SEARCHING &&
+      order.status !== OrderStatus.ASSIGNED
     ) {
       throw new BadRequestException('Cannot cancel at this stage');
+    }
+
+    const now = Date.now();
+    const startTime = new Date(order.startTime).getTime();
+    const cancelDeadline = startTime - 60 * 60 * 1000;
+
+    if (Number.isFinite(startTime) && now >= cancelDeadline) {
+      throw new BadRequestException('Không thể hủy đơn trong vòng 1 tiếng trước giờ bắt đầu');
+    }
+
+    if (order.paidAt && String(order.paymentMethod || '').toLowerCase() !== 'cash') {
+      await this.paymentOrchestrator.handleCancellation(order);
     }
 
     order.status = OrderStatus.CANCELLED;
     await order.save();
 
+    if (order.status === OrderStatus.CANCELLED && order.taskerId) {
+      try {
+        await this.notificationsService.createNotification(order.taskerId.toString(), {
+          title: 'Khách hàng đã hủy dịch vụ',
+          content: `Đơn hàng ${order._id} đã bị khách hàng hủy.`,
+          type: 'order_cancelled',
+          orderId: order._id.toString(),
+          senderId: order.customerId.toString(),
+        });
+      } catch (err) {
+        console.warn('Failed to notify tasker about cancellation', err);
+      }
+    }
+
+    // Send cancellation emails to customer and tasker
+    try {
+      const customer = await this.userModel.findById(order.customerId).lean();
+      if (customer?.email) {
+        await this.mailService.sendOrderCancelledEmail(
+          customer.email,
+          customer.fullName || 'Khách hàng',
+          order._id.toString(),
+          order.serviceSnapshot?.name || 'Dịch vụ',
+          order.isRefunded ? order.totalPrice : order.totalPrice,
+        );
+      }
+    } catch (err) {
+      console.warn('Failed to send cancellation email to customer', err);
+    }
+
+    if (order.taskerId) {
+      try {
+        const tasker = await this.userModel.findById(order.taskerId).lean();
+        if (tasker?.email) {
+          await this.mailService.sendTaskerOrderCancelledEmail(
+            tasker.email,
+            tasker.fullName || 'Tasker',
+            order._id.toString(),
+            order.serviceSnapshot?.name || 'Dịch vụ',
+            (await this.userModel.findById(order.customerId))?.fullName || '',
+          );
+        }
+      } catch (err) {
+        console.warn('Failed to send cancellation email to tasker', err);
+      }
+    }
+
     await this.emitOrderUpdateById(order._id as Types.ObjectId);
+    await this.emitUserUpdateWithStats(order.customerId);
 
     return order;
   }

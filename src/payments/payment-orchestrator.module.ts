@@ -1,6 +1,7 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { MailModule } from 'src/mail/mail.module';
+import { NotificationsModule } from 'src/notifications/notifications.module';
 import { Order, OrderSchema } from 'src/orders/order.schema';
 import { OrdersModule } from 'src/orders/orders.module';
 import { User, UserSchema } from 'src/users/user.schema';
@@ -26,6 +27,7 @@ import { StripeModule } from './stripe.module';
     WalletModule,
     forwardRef(() => OrdersModule),
     MailModule,
+    NotificationsModule,
     StripeModule,
   ],
   providers: [PaymentOrchestratorService],

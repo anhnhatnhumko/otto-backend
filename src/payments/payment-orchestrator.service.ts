@@ -12,7 +12,7 @@ import { User } from 'src/users/user.schema';
 import { Wallet } from 'src/wallet/schemas/wallet.schema';
 import { TransactionStatus } from 'src/wallet/enums/transaction-status.enum';
 import { StripeService } from './stripe.service';
-import { Notification } from 'src/notifications/notification.schema';
+import { NotificationsService } from 'src/notifications/notifications.service';
 
 @Injectable()
 export class PaymentOrchestratorService {
@@ -32,8 +32,7 @@ export class PaymentOrchestratorService {
         private userModel: Model<User>,
         @InjectModel(Wallet.name)
         private walletModel: Model<Wallet>,
-        @InjectModel(Notification.name)
-        private notificationModel: Model<Notification>,
+        private readonly notificationsService: NotificationsService,
         private readonly walletService: WalletService,
         private readonly stripeService: StripeService,
         // private readonly orderService: OrdersService,
@@ -216,12 +215,15 @@ export class PaymentOrchestratorService {
 
     
 
-    async handleTimeout(order: any) {
+    private async refundOrder(
+        order: any,
+        notification: { title: string; content: string },
+    ) {
         if (order.isRefunded) return;
 
         if (!order.paidAt) return;
-            // Normalize paymentMethod string and skip refund for cash payments
-            if ((order.paymentMethod || '').toString().toLowerCase() === 'cash') return;
+        // Normalize paymentMethod string and skip refund for cash payments
+        if ((order.paymentMethod || '').toString().toLowerCase() === 'cash') return;
 
         await this.walletService.refundEscrow(
             order.customerId.toString(),
@@ -230,15 +232,33 @@ export class PaymentOrchestratorService {
 
         order.isRefunded = true;
         await order.save();
-        // Create a user notification informing refund to wallet
+
         try {
-            await this.notificationModel.create({
-                userId: order.customerId,
-                title: 'Hoàn tiền đã được trả về ví',
-                content: `Đơn hàng ${order._id} đã được hoàn ${order.totalPrice}đ vào ví của bạn.`,
-            });
+            await this.notificationsService.createNotification(
+                order.customerId.toString(),
+                {
+                    title: notification.title,
+                    content: notification.content,
+                    type: 'refund',
+                    orderId: order._id.toString(),
+                },
+            );
         } catch (err) {
             console.warn('Failed to create refund notification', err);
         }
+    }
+
+    async handleTimeout(order: any) {
+        return this.refundOrder(order, {
+            title: 'Hoàn tiền đã được trả về ví',
+            content: `Đơn hàng ${order._id} đã được hoàn ${order.totalPrice}đ vào ví của bạn.`,
+        });
+    }
+
+    async handleCancellation(order: any) {
+        return this.refundOrder(order, {
+            title: 'Đơn hàng đã được hủy',
+            content: `Đơn hàng ${order._id} đã được hủy và ${order.totalPrice}đ đã được hoàn về ví của bạn.`,
+        });
     }
 }

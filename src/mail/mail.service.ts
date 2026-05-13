@@ -1,75 +1,79 @@
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
-import * as nodemailer from "nodemailer";
 import { resolvePublicUrl } from '../utils/public-url.util';
-import type SMTPTransport from 'nodemailer/lib/smtp-transport';
-import type Mail from 'nodemailer/lib/mailer';
+
+type MailOptions = {
+  to: string | string[];
+  subject: string;
+  html: string;
+  text?: string;
+};
 
 @Injectable()
 export class MailService implements OnModuleInit {
   private readonly logger = new Logger(MailService.name);
-  private transporter: Mail;
+  private resendApiKey: string;
   private defaultFrom: string;
 
   constructor() {
-    const port = Number(process.env.MAIL_PORT || 587);
-    const secure = port === 465;
-    if (!process.env.MAIL_HOST) {
-      throw new Error('Missing MAIL_HOST');
+    const key = process.env.RESEND_API_KEY?.trim();
+    if (!key) {
+      throw new Error('Missing RESEND_API_KEY');
     }
 
-    if (!process.env.MAIL_USER) {
-      throw new Error('Missing MAIL_USER');
+    const from = process.env.MAIL_FROM?.trim();
+    if (!from) {
+      throw new Error('Missing MAIL_FROM (must be a verified Resend sender)');
     }
 
-    if (!process.env.MAIL_PASS) {
-      throw new Error('Missing MAIL_PASS');
-    }
-
-    const transportConfig: SMTPTransport.Options = {
-      host: process.env.MAIL_HOST,
-      port,
-      secure,
-      auth: {
-        user: process.env.MAIL_USER,
-        pass: process.env.MAIL_PASS,
-      },
-    };
-
-    this.defaultFrom = process.env.MAIL_FROM || process.env.MAIL_USER || 'no-reply@otto.local';
-    
-    console.log('[MailService] Initializing with config:', {
-      host: process.env.MAIL_HOST,
-      port,
-      secure,
-      user: process.env.MAIL_USER,
-      from: this.defaultFrom,
-    });
-    
-    this.transporter = nodemailer.createTransport(transportConfig);
+    this.resendApiKey = key;
+    this.defaultFrom = from;
+    this.logger.log('[MailService] Using Resend API (Resend-only mode)');
   }
 
   async onModuleInit() {
-    try {
-      this.logger.log('[MailService] Bắt đầu xác thực SMTP...');
-      await this.transporter.verify();
-      this.logger.log('[MailService] ✅ Xác thực SMTP thành công');
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      this.logger.error(`[MailService] ❌ Xác thực SMTP thất bại: ${errorMsg}`);
-      this.logger.error(`[MailService] Chi tiết:`, error instanceof Error ? error.stack : '');
-    }
+    this.logger.log('[MailService] Resend API key present — ready to send via Resend');
   }
 
-  private async sendMailWithLogging(options: Mail.Options, tag: string) {
+  private async sendMailWithLogging(options: MailOptions, tag: string) {
     try {
       this.logger.log(`[${tag}] Sending email to=${options.to} from=${this.defaultFrom}`);
-      const info = await this.transporter.sendMail({
+
+      const toValue = Array.isArray(options.to)
+        ? options.to.map((item) => String(item))
+        : [String(options.to)];
+
+      const payload = {
         from: this.defaultFrom,
-        ...options,
+        to: toValue,
+        subject: String(options.subject ?? ''),
+        html: String(options.html ?? ''),
+        text: options.text ? String(options.text) : undefined,
+      };
+
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.resendApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
       });
 
-      this.logger.log(`[${tag}] Mail sent: messageId=${info.messageId} to=${options.to}`);
-      return info;
+      const responseText = await response.text();
+      let responseData: any = null;
+      try {
+        responseData = responseText ? JSON.parse(responseText) : null;
+      } catch {
+        responseData = { raw: responseText };
+      }
+
+      if (!response.ok) {
+        const resendMessage = responseData?.message || responseText || 'Resend API request failed';
+        throw new Error(`Resend send failed (${response.status}): ${resendMessage}`);
+      }
+
+      this.logger.log(`[${tag}] Resend send success id=${responseData?.id ?? 'unknown'} to=${options.to}`);
+      return responseData;
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       this.logger.error(`[${tag}] Mail send failed to=${options.to} error=${errorMsg}`);
@@ -206,6 +210,65 @@ export class MailService implements OnModuleInit {
       </div>
       `,
     }, 'order-accepted');
+  }
+
+  async sendOrderCancelledEmail(
+    email: string,
+    customerName: string,
+    orderId: string,
+    serviceName: string,
+    refundAmount?: number,
+  ) {
+    const frontend = resolvePublicUrl(process.env.FRONTEND_URL, process.env.BACKEND_URL);
+    const orderLink = `${frontend}/orders/${orderId}`;
+    const formattedPrice = refundAmount
+      ? new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(refundAmount)
+      : null;
+
+    await this.sendMailWithLogging({
+      to: email,
+      subject: `Đơn hàng "${serviceName}" đã bị hủy`,
+      html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2>Xin chào ${customerName} 👋</h2>
+        <p>Đơn hàng <strong>${serviceName}</strong> đã được hủy theo yêu cầu của bạn.</p>
+        ${formattedPrice ? `<p>Số tiền ${formattedPrice} sẽ được hoàn về ví của bạn trong vài phút.</p>` : ''}
+        <p style="text-align: center; margin: 30px 0;">
+          <a href="${orderLink}" style="background-color: #ef4444; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">Xem chi tiết đơn hàng</a>
+        </p>
+        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
+        <p style="color: #6b7280; font-size: 12px; text-align: center;">Nếu bạn cần trợ giúp, vui lòng liên hệ với bộ phận hỗ trợ của chúng tôi.</p>
+      </div>
+    `,
+    }, 'order-cancelled-customer');
+  }
+
+  async sendTaskerOrderCancelledEmail(
+    email: string,
+    taskerName: string,
+    orderId: string,
+    serviceName: string,
+    customerName?: string,
+  ) {
+    const frontend = resolvePublicUrl(process.env.FRONTEND_URL, process.env.BACKEND_URL);
+    const orderLink = `${frontend}/orders/${orderId}`;
+
+    await this.sendMailWithLogging({
+      to: email,
+      subject: `Khách hàng đã hủy đơn ${serviceName}`,
+      html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2>Xin chào ${taskerName} 👋</h2>
+        <p>Khách hàng ${customerName ?? ''} đã hủy đơn <strong>${serviceName}</strong> (Mã: <strong>${orderId}</strong>).</p>
+        <p>Nếu bạn đã chuẩn bị hoặc đã đến địa điểm, vui lòng bỏ qua hoặc liên hệ khách hàng để xác nhận.</p>
+        <p style="text-align: center; margin: 30px 0;">
+          <a href="${orderLink}" style="background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">Xem chi tiết đơn hàng</a>
+        </p>
+        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
+        <p style="color: #6b7280; font-size: 12px; text-align: center;">Cảm ơn bạn đã làm việc cùng Otto.</p>
+      </div>
+    `,
+    }, 'order-cancelled-tasker');
   }
 
   async sendOrderCompletedEmail(

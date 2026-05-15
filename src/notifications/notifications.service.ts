@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Notification, NotificationDocument } from './notification.schema';
 import { NotificationsGateway } from './notifications.gateway';
+import { AdminGateway } from '../admin/admin.gateway';
 
 @Injectable()
 export class NotificationsService {
@@ -10,6 +11,7 @@ export class NotificationsService {
   constructor(
     @InjectModel(Notification.name) private notificationModel: Model<NotificationDocument>,
     private readonly notificationsGateway: NotificationsGateway,
+    private readonly adminGateway: AdminGateway,
   ) {}
 
   async findForUser(userId: string, limit = 20) {

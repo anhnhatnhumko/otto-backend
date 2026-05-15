@@ -863,26 +863,28 @@ export class OrdersService {
     order.status = OrderStatus.CANCELLED;
     await order.save();
 
-    if (order.status === OrderStatus.CANCELLED && order.taskerId) {
+    console.log(`🔥 ORDER CANCELLED: ${order._id}, taskerId: ${order.taskerId}`);
+
+    if (order.taskerId) {
       try {
-        // 🔥 PERSIST NOTIFICATION TO DB + SEND REALTIME
-        const notification = await this.notificationsService.createNotification(order.taskerId.toString(), {
+        console.log(`📢 Emitting order:cancelled for order ${order._id}`);
+        
+        // 🔥 FORCE REALTIME EMISSION IMMEDIATELY
+        this.adminGateway.emitOrderCancelled({
+          orderId: order._id.toString(),
+          taskerId: order.taskerId.toString(),
+          customerId: order.customerId.toString(),
+          serviceName: order.serviceSnapshot?.name || 'Dịch vụ',
+        });
+        
+        // 🔥 THEN PERSIST NOTIFICATION TO DB (don't wait for it)
+        this.notificationsService.createNotification(order.taskerId.toString(), {
           title: 'Khách hàng đã hủy dịch vụ',
           content: `Đơn hàng ${order._id} đã bị khách hàng hủy.`,
           type: 'order_cancelled',
           orderId: order._id.toString(),
           senderId: order.customerId.toString(),
-        });
-        
-        // 🔥 FORCE REALTIME EMISSION TO MAKE SURE TASKER GETS IT IMMEDIATELY
-        if (notification) {
-          this.adminGateway.emitOrderCancelled({
-            orderId: order._id.toString(),
-            taskerId: order.taskerId.toString(),
-            customerId: order.customerId.toString(),
-            serviceName: order.serviceSnapshot?.name || 'Dịch vụ',
-          });
-        }
+        }).catch(err => console.warn('Failed to save notification to DB', err));
       } catch (err) {
         console.warn('Failed to notify tasker about cancellation', err);
       }

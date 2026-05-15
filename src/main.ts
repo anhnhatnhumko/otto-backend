@@ -88,6 +88,8 @@ async function bootstrap() {
   const allowedOrigins = new Set([
     'http://localhost:3000',
     'http://localhost:3001',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:3001',
     'https://alert-enjoyment-production-5414.up.railway.app',
     'https://ottohome.online',
     'https://www.ottohome.online',

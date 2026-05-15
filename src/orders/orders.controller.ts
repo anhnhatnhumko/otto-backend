@@ -160,6 +160,15 @@ export class OrdersController {
     return this.ordersService.cancelOrder(id, req.user.userId);
   }
 
+  // ==========================
+  // CUSTOMER - KEEP OVERDUE ORDER
+  // ==========================
+  @Patch(':id/timeout-keep')
+  @Roles(Role.CUSTOMER)
+  timeoutKeep(@Param('id') id: string, @Req() req) {
+    return this.ordersService.keepTimeoutOrder(id, req.user.userId);
+  }
+
   @Post('wallet/create-payment')
   async createWalletPayment(@Req() req, @Body() body) {
     return this.paymentOrchestrator.createWalletPayment(

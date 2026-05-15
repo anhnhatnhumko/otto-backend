@@ -18,9 +18,22 @@ export class AdminGateway implements OnGatewayConnection {
     handleConnection(client: Socket) {
         const roleFromAuth = String(client.handshake.auth?.role ?? '').toUpperCase();
         const roleFromQuery = String(client.handshake.query?.role ?? '').toUpperCase();
+        const userIdFromAuth = String(client.handshake.auth?.userId ?? '');
+        const userIdFromQuery = String(client.handshake.query?.userId ?? '');
 
-        if (roleFromAuth === 'ADMIN' || roleFromQuery === 'ADMIN') {
+        const role = roleFromAuth || roleFromQuery;
+        const userId = userIdFromAuth || userIdFromQuery;
+
+        // 🔥 AUTO JOIN ADMIN TO ADMIN ROOM
+        if (role === 'ADMIN') {
             client.join('admin');
+        }
+
+        // 🔥 AUTO JOIN TASKER/CUSTOMER TO USER ROOM FOR REALTIME NOTIFICATIONS
+        if (userId) {
+            const userRoomName = `user-${userId}`;
+            client.join(userRoomName);
+            console.log(`✅ User ${userId} joined room: ${userRoomName}`);
         }
     }
 
@@ -150,5 +163,40 @@ export class AdminGateway implements OnGatewayConnection {
         this.emitToAdmins('admin:orders:status-updated', statusPayload);
         this.emitToAdmins('order:status-updated', statusPayload);
         this.emitToOrderRoom(orderId, 'order:status-updated', statusPayload);
+    }
+
+    emitOrderCancelled(payload: { orderId: string; taskerId: string; customerId: string; serviceName: string }) {
+        const { orderId, taskerId, customerId, serviceName } = payload;
+
+        console.log(`🔥 emitOrderCancelled called for order ${orderId}, taskerId: ${taskerId}`);
+
+        // Emit to admin dashboard
+        this.emitToAdmins('admin:order-cancelled', payload);
+
+        // Emit to order room (for realtime tracking)
+        this.emitToOrderRoom(orderId, 'order:cancelled', payload);
+
+        // Emit to tasker (for immediate notification)
+        this.server.to(`user-${taskerId}`).emit('order:cancelled', payload);
+        console.log(`📨 Emitted order:cancelled to user-${taskerId}`);
+
+        // Emit to customer
+        this.server.to(`user-${customerId}`).emit('order:cancelled-confirmed', payload);
+    }
+
+    emitOrderKept(payload: { orderId: string; taskerId: string; customerId: string; serviceName: string }) {
+        const { orderId, taskerId, customerId, serviceName } = payload;
+
+        // Emit to admin dashboard
+        this.emitToAdmins('admin:order-kept', payload);
+
+        // Emit to order room
+        this.emitToOrderRoom(orderId, 'order:kept', payload);
+
+        // Emit to tasker (for immediate notification that order is active again)
+        this.server.to(`user-${taskerId}`).emit('order:kept', payload);
+
+        // Emit to customer
+        this.server.to(`user-${customerId}`).emit('order:kept-confirmed', payload);
     }
 }

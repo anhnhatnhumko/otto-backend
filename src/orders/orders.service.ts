@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Order } from './order.schema';
@@ -864,13 +865,24 @@ export class OrdersService {
 
     if (order.status === OrderStatus.CANCELLED && order.taskerId) {
       try {
-        await this.notificationsService.createNotification(order.taskerId.toString(), {
+        // 🔥 PERSIST NOTIFICATION TO DB + SEND REALTIME
+        const notification = await this.notificationsService.createNotification(order.taskerId.toString(), {
           title: 'Khách hàng đã hủy dịch vụ',
           content: `Đơn hàng ${order._id} đã bị khách hàng hủy.`,
           type: 'order_cancelled',
           orderId: order._id.toString(),
           senderId: order.customerId.toString(),
         });
+        
+        // 🔥 FORCE REALTIME EMISSION TO MAKE SURE TASKER GETS IT IMMEDIATELY
+        if (notification) {
+          this.adminGateway.emitOrderCancelled({
+            orderId: order._id.toString(),
+            taskerId: order.taskerId.toString(),
+            customerId: order.customerId.toString(),
+            serviceName: order.serviceSnapshot?.name || 'Dịch vụ',
+          });
+        }
       } catch (err) {
         console.warn('Failed to notify tasker about cancellation', err);
       }
@@ -973,14 +985,14 @@ export class OrdersService {
   // ==========================
   // AUTO TIMEOUT - Hủy đơn quá hạn
   // ==========================
+  @Cron('*/10 * * * * *')
   async handleTimeoutOrders() {
     const now = new Date();
-    const timeoutCutoff = new Date(now.getTime() - 2 * 60 * 1000);
 
-    // Tìm những đơn hàng ASSIGNED đã qua endTime + 2 phút
+    // Tìm những đơn hàng ASSIGNED đã qua scheduleTime (không bắt đầu đúng giờ)
     const timeoutOrders = await this.orderModel.find({
       status: OrderStatus.ASSIGNED,
-      endTime: { $lte: timeoutCutoff },
+      scheduleTime: { $lte: now },
     });
 
     for (const order of timeoutOrders) {
@@ -1005,4 +1017,59 @@ export class OrdersService {
     console.log(`Auto-timeout processed: ${timeoutOrders.length} orders`);
     return timeoutOrders.length;
   }
+
+  // ==========================
+  // CUSTOMER - KEEP TIMEOUT ORDER
+  // ==========================
+  async keepTimeoutOrder(orderId: string, customerId: string) {
+    const order = await this.orderModel.findById(orderId);
+
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    if (order.customerId.toString() !== customerId) {
+      throw new ForbiddenException('Not your order');
+    }
+
+    if (order.status !== OrderStatus.TIMEOUT) {
+      throw new BadRequestException('Order is not in timeout state');
+    }
+
+    // Chuyển lại về ASSIGNED để tasker có thể tiếp tục làm
+    order.status = OrderStatus.ASSIGNED;
+    await order.save();
+
+    // Thông báo cho tasker biết order được giữ lại
+    if (order.taskerId) {
+      try {
+        // 🔥 PERSIST NOTIFICATION + EMIT REALTIME
+        const notification = await this.notificationsService.createNotification(order.taskerId.toString(), {
+          title: 'Đơn hàng được giữ lại',
+          content: `Khách hàng đã quyết định giữ lại đơn hàng đã quá hạn. Vui lòng bắt đầu làm ngay.`,
+          type: 'order_kept',
+          orderId: orderId,
+          senderId: order.customerId.toString(),
+        });
+
+        // 🔥 FORCE REALTIME TO TASKER
+        if (notification) {
+          this.adminGateway.emitOrderKept({
+            orderId: order._id.toString(),
+            taskerId: order.taskerId.toString(),
+            customerId: order.customerId.toString(),
+            serviceName: order.serviceSnapshot?.name || 'Dịch vụ',
+          });
+        }
+      } catch (err) {
+        console.warn('Failed to notify tasker about kept order', err);
+      }
+    }
+
+    await this.emitOrderUpdateById(order._id as Types.ObjectId);
+    await this.emitUserUpdateWithStats(order.customerId);
+
+    return order;
+  }
 }
+

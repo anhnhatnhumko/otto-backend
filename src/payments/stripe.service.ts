@@ -38,8 +38,19 @@ export class StripeService {
       throw new Error('FRONTEND_URL is not configured');
     }
 
+    const metadataType = String(metadata?.type || '').toUpperCase();
     const orderId = metadata?.orderId;
-    const successUrl = `${frontendUrl}/payment/success?orderId=${encodeURIComponent(orderId)}&source=stripe&session_id={CHECKOUT_SESSION_ID}`;
+    const transactionId = metadata?.transactionId;
+
+    const successUrl =
+      metadataType === 'WALLET'
+        ? `${frontendUrl}/deposit/success?transactionId=${encodeURIComponent(transactionId || '')}&source=wallet&session_id={CHECKOUT_SESSION_ID}`
+        : `${frontendUrl}/payment/success?orderId=${encodeURIComponent(orderId || '')}&source=stripe&session_id={CHECKOUT_SESSION_ID}`;
+
+    const cancelUrl =
+      metadataType === 'WALLET'
+        ? `${frontendUrl}/deposit`
+        : `${frontendUrl}/payment/cancel`;
 
     const session = await this.stripe.checkout.sessions.create({
       payment_method_types: ['card'],
@@ -57,7 +68,7 @@ export class StripeService {
         },
       ],
       success_url: successUrl,
-      cancel_url: `${frontendUrl}/payment/cancel`,
+      cancel_url: cancelUrl,
       metadata,
     });
 

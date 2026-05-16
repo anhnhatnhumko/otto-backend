@@ -38,6 +38,9 @@ function buildFullAddress(provinceName?: string, wardName?: string) {
     .join(', ');
 }
 
+const OVERDUE_WARNING_DELAY_MS = 2 * 60 * 1000;
+const OVERDUE_TIMEOUT_DELAY_MS = 15 * 60 * 1000;
+
 @Injectable()
 export class OrdersService {
   constructor(
@@ -109,6 +112,42 @@ export class OrdersService {
 
     if (populated) {
       this.adminGateway.emitOrderUpdated(presentOrder(populated));
+    }
+  }
+
+  @Cron('*/10 * * * * *')
+  async handleOverdueWarnings() {
+    const now = new Date();
+    const warningThreshold = new Date(now.getTime() - OVERDUE_WARNING_DELAY_MS);
+
+    const overdueOrders = await this.orderModel.find({
+      status: {
+        $in: [
+          OrderStatus.ASSIGNED,
+          OrderStatus.IN_PROGRESS,
+          OrderStatus.WAITING_CONFIRMATION,
+        ],
+      },
+      startTime: { $lte: warningThreshold },
+      endTime: { $gt: now },
+      overdueWarningSentAt: { $exists: false },
+    });
+
+    for (const order of overdueOrders) {
+      order.overdueWarningSentAt = now;
+      await order.save();
+      await this.emitOrderUpdateById(order._id as Types.ObjectId);
+
+      await this.notificationsService.createNotification(String(order.customerId), {
+        title: 'Đơn hàng sắp quá hạn',
+        content: 'Tasker chưa bắt đầu công việc sau giờ hẹn. Vui lòng kiểm tra đơn hàng của bạn.',
+        type: 'order_overdue_warning',
+        orderId: String(order._id),
+      });
+    }
+
+    if (overdueOrders.length) {
+      console.log(`Overdue warning sent for ${overdueOrders.length} orders`);
     }
   }
 
@@ -651,6 +690,22 @@ export class OrdersService {
 
     await this.emitOrderUpdateById(order._id as Types.ObjectId);
 
+    // 🔥 SEND NOTIFICATION TO CUSTOMER WHEN TASKER COMPLETES
+    const tasker = await this.userModel.findById(taskerId).lean();
+    if (order.customerId) {
+      await this.notificationsService.createNotification(
+        order.customerId.toString(),
+        {
+          title: 'Công việc đã hoàn thành',
+          content: `${tasker?.fullName || 'Tasker'} đã hoàn thành công việc. Vui lòng xác nhận.`,
+          type: 'order_completed_confirmation',
+          orderId: String(order._id),
+          senderId: taskerId,
+          senderName: tasker?.fullName,
+        }
+      );
+    }
+
     return order;
   }
 
@@ -850,9 +905,17 @@ export class OrdersService {
 
     const now = Date.now();
     const startTime = new Date(order.startTime).getTime();
+    const endTime = new Date(order.endTime).getTime();
     const cancelDeadline = startTime - 60 * 60 * 1000;
+    const overdueWarningWindowStart = startTime + OVERDUE_WARNING_DELAY_MS;
+    const overdueTimeoutWindowEnd = endTime + OVERDUE_TIMEOUT_DELAY_MS;
+    const canCancelAsOverdue =
+      Number.isFinite(startTime) &&
+      Number.isFinite(endTime) &&
+      now >= overdueWarningWindowStart &&
+      now < overdueTimeoutWindowEnd;
 
-    if (Number.isFinite(startTime) && now >= cancelDeadline) {
+    if (Number.isFinite(startTime) && now >= cancelDeadline && !canCancelAsOverdue) {
       throw new BadRequestException('Không thể hủy đơn trong vòng 1 tiếng trước giờ bắt đầu');
     }
 
@@ -990,11 +1053,19 @@ export class OrdersService {
   @Cron('*/10 * * * * *')
   async handleTimeoutOrders() {
     const now = new Date();
+    const timeoutThreshold = new Date(now.getTime() - OVERDUE_TIMEOUT_DELAY_MS);
 
-    // Tìm những đơn hàng ASSIGNED đã qua scheduleTime (không bắt đầu đúng giờ)
+    // Tìm những đơn hàng đã quá thời gian kết thúc 15 phút
     const timeoutOrders = await this.orderModel.find({
-      status: OrderStatus.ASSIGNED,
-      scheduleTime: { $lte: now },
+      status: {
+        $in: [
+          OrderStatus.SEARCHING,
+          OrderStatus.ASSIGNED,
+          OrderStatus.IN_PROGRESS,
+          OrderStatus.WAITING_CONFIRMATION,
+        ],
+      },
+      endTime: { $lte: timeoutThreshold },
     });
 
     for (const order of timeoutOrders) {
@@ -1007,6 +1078,21 @@ export class OrdersService {
         await this.paymentOrchestrator.handleTimeout(order);
       } catch (err) {
         console.error('Error handling refund for timeout order', order._id, err);
+      }
+
+      try {
+        const customer = await this.userModel.findById(order.customerId).lean();
+        if (customer?.email) {
+          await this.mailService.sendOrderTimeoutEmail(
+            customer.email,
+            customer.fullName || 'Khách hàng',
+            order._id.toString(),
+            order.serviceSnapshot?.name || 'Dịch vụ',
+            order.isRefunded ? order.totalPrice : undefined,
+          );
+        }
+      } catch (err) {
+        console.warn('Failed to send timeout email to customer', err);
       }
       // Hoàn tiền cho customer (thêm vào order history hoặc wallet transaction)
       // Sẽ xử lý qua wallet service nếu cần

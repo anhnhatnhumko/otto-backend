@@ -271,6 +271,37 @@ export class MailService implements OnModuleInit {
     }, 'order-cancelled-tasker');
   }
 
+  async sendOrderTimeoutEmail(
+    email: string,
+    customerName: string,
+    orderId: string,
+    serviceName: string,
+    refundAmount?: number,
+  ) {
+    const frontend = resolvePublicUrl(process.env.FRONTEND_URL, process.env.BACKEND_URL);
+    const orderLink = `${frontend}/orders/${orderId}`;
+    const formattedPrice = refundAmount
+      ? new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(refundAmount)
+      : null;
+
+    await this.sendMailWithLogging({
+      to: email,
+      subject: `Đơn hàng "${serviceName}" đã quá hạn`,
+      html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2>Xin chào ${customerName} 👋</h2>
+        <p>Đơn hàng <strong>${serviceName}</strong> đã quá hạn và được hệ thống tự động xử lý.</p>
+        ${formattedPrice ? `<p>Số tiền ${formattedPrice} đã được hoàn về ví của bạn.</p>` : ''}
+        <p style="text-align: center; margin: 30px 0;">
+          <a href="${orderLink}" style="background-color: #f97316; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">Xem chi tiết đơn hàng</a>
+        </p>
+        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
+        <p style="color: #6b7280; font-size: 12px; text-align: center;">Nếu bạn cần hỗ trợ thêm, vui lòng liên hệ với đội ngũ Otto.</p>
+      </div>
+    `,
+    }, 'order-timeout-customer');
+  }
+
   async sendOrderCompletedEmail(
     email: string,
     customerName: string,

@@ -49,6 +49,9 @@ export class Order {
   @Prop({ required: true, type: Date, index: true })
   endTime: Date;
 
+  @Prop({ index: true })
+  overdueWarningSentAt?: Date;
+
   @Prop({ required: true })
   totalHours: number;
 
@@ -96,7 +99,7 @@ export class Order {
   @Prop()
   review?: string;
 
-  @Prop({ enum: ['cash', 'wallet', 'stripe'], required: true })
+  @Prop({ enum: ['cash', 'wallet', 'stripe'], required: true, default: 'cash' })
   paymentMethod: string;
 
   @Prop({ default: false })

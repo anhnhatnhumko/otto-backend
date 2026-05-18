@@ -1,0 +1,35 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "build-backend-tasker-requests",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"build"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "build-backend-tasker-requests",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"build"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "start-backend-dev-tasker",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"start:dev"
+			],
+			"isBackground": true
+		}
+	]
+}

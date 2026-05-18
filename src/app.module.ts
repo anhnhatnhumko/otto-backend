@@ -59,6 +59,8 @@ if (!mongoUri) {
       UploadModule,
       UserModule,
       AdminModule,
+      // Tasker requests
+      require('./tasker-requests/tasker-requests.module').TaskerRequestsModule,
       TaskerModule,
       // Chat
       ChatModule,

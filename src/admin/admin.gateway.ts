@@ -60,7 +60,7 @@ export class AdminGateway implements OnGatewayConnection {
         }
     }
 
-    private emitToAdmins(eventName: string, payload: unknown) {
+    emitToAdmins(eventName: string, payload: unknown) {
         this.server.to('admin').emit(eventName, payload);
     }
 
@@ -198,5 +198,22 @@ export class AdminGateway implements OnGatewayConnection {
 
         // Emit to customer
         this.server.to(`user-${customerId}`).emit('order:kept-confirmed', payload);
+    }
+
+    // ================= TASKER REQUESTS =================
+    emitTaskerRequestCreated(request: any) {
+        this.emitToAdmins('admin:tasker-request-created', request);
+        this.emitToAdmins('admin:tasker-requests:created', request);
+    }
+
+    emitTaskerRequestUpdated(request: any) {
+        this.emitToAdmins('admin:tasker-request-updated', request);
+        this.emitToAdmins('admin:tasker-requests:updated', request);
+    }
+
+    emitTaskerRequestDeleted(id: string) {
+        const payload = { id, _id: id };
+        this.emitToAdmins('admin:tasker-request-deleted', payload);
+        this.emitToAdmins('admin:tasker-requests:deleted', payload);
     }
 }

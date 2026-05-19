@@ -14,33 +14,33 @@ import { OrderStatus } from '../orders/order-status.enum';
 
 const REWARD_TIERS = [
   {
-    level: 'Thành viên',
+    level: 'Bronze',
     minPoints: 0,
-    nextLevelName: 'Bronze',
+    nextLevelName: 'VIP Silver',
     nextLevelPoints: 5000,
   },
   {
-    level: 'Bronze',
+    level: 'VIP Silver',
     minPoints: 5000,
-    nextLevelName: 'VIP Silver',
+    nextLevelName: 'VIP Gold',
     nextLevelPoints: 10000,
   },
   {
-    level: 'VIP Silver',
+    level: 'VIP Gold',
     minPoints: 10000,
-    nextLevelName: 'VIP Gold',
+    nextLevelName: 'VIP Platinum',
     nextLevelPoints: 20000,
   },
   {
-    level: 'VIP Gold',
+    level: 'VIP Platinum',
     minPoints: 20000,
-    nextLevelName: 'VIP Platinum',
+    nextLevelName: 'VIP Diamond',
     nextLevelPoints: 50000,
   },
   {
-    level: 'VIP Platinum',
+    level: 'VIP Diamond',
     minPoints: 50000,
-    nextLevelName: 'VIP Platinum',
+    nextLevelName: 'VIP Diamond',
     nextLevelPoints: 50000,
   },
 ] as const;

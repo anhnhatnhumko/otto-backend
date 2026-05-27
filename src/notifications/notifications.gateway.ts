@@ -19,14 +19,19 @@ function parseCookie(cookieHeader: string | undefined) {
     }, {} as Record<string, string>);
 }
 
-@WebSocketGateway({ cors: { origin: '*' } })
+@WebSocketGateway({
+  cors: {
+    origin: ['https://ottohome.online'],
+    credentials: true,
+  }
+})
 export class NotificationsGateway implements OnGatewayConnection {
   @WebSocketServer()
   server: Server;
 
   private readonly logger = new Logger(NotificationsGateway.name);
 
-  constructor(private readonly jwtService: JwtService) {}
+  constructor(private readonly jwtService: JwtService) { }
 
   handleConnection(client: Socket) {
     const tokenFromAuth = String(client.handshake.auth?.token ?? '');

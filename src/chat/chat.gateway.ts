@@ -25,7 +25,12 @@ function parseCookie(cookieHeader: string | undefined) {
   }, {} as Record<string, string>);
 }
 
-@WebSocketGateway({ cors: { origin: '*' } })
+@WebSocketGateway({
+  cors: {
+    origin: ['https://ottohome.online'],
+    credentials: true,
+  }
+})
 export class ChatGateway implements OnGatewayConnection {
   @WebSocketServer()
   server: Server;
@@ -38,7 +43,7 @@ export class ChatGateway implements OnGatewayConnection {
     private ordersService: OrdersService,
     private notificationsService: NotificationsService,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
-  ) {}
+  ) { }
 
   handleConnection(client: Socket) {
     // Try to extract token from auth, query or cookie

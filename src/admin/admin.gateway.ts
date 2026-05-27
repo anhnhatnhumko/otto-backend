@@ -9,7 +9,7 @@ import {
 import { Server, Socket } from 'socket.io';
 
 @WebSocketGateway({
-    cors: { origin: '*' },
+    cors: { origin: ['https://ottohome.online'], credentials: true },
 })
 export class AdminGateway implements OnGatewayConnection {
     @WebSocketServer()

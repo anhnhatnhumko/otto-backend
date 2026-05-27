@@ -7,6 +7,13 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 
+const SOCKET_ALLOWED_ORIGINS = [
+  'https://ottohome.online',
+  'https://www.ottohome.online',
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+];
+
 function parseCookie(cookieHeader: string | undefined) {
   if (!cookieHeader) return {} as Record<string, string>;
   return cookieHeader
@@ -21,7 +28,7 @@ function parseCookie(cookieHeader: string | undefined) {
 
 @WebSocketGateway({
   cors: {
-    origin: ['https://ottohome.online'],
+    origin: SOCKET_ALLOWED_ORIGINS,
     credentials: true,
   }
 })

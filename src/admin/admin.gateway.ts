@@ -8,8 +8,15 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 
+const SOCKET_ALLOWED_ORIGINS = [
+    'https://ottohome.online',
+    'https://www.ottohome.online',
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+];
+
 @WebSocketGateway({
-    cors: { origin: ['https://ottohome.online'], credentials: true },
+    cors: { origin: SOCKET_ALLOWED_ORIGINS, credentials: true },
 })
 export class AdminGateway implements OnGatewayConnection {
     @WebSocketServer()

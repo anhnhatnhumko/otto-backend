@@ -110,7 +110,29 @@ export class ChatGateway implements OnGatewayConnection {
       return;
     }
 
-    // Create message in DB
+    await this.processAndBroadcastChatMessage({
+      orderId,
+      text,
+      senderId,
+      senderRole,
+    });
+  }
+
+  async processAndBroadcastChatMessage(payload: {
+    orderId: string;
+    text: string;
+    senderId: string;
+    senderRole: string;
+  }) {
+    const orderId = String(payload.orderId ?? '').trim();
+    const text = String(payload.text ?? '').trim();
+    const senderId = String(payload.senderId ?? '').trim();
+    const senderRole = String(payload.senderRole ?? '').toUpperCase();
+
+    if (!orderId || !text || !senderId) {
+      throw new Error('Missing chat payload');
+    }
+
     const msg = await this.chatService.createMessage({
       orderId,
       senderId,
@@ -118,14 +140,11 @@ export class ChatGateway implements OnGatewayConnection {
       text,
     });
 
-    // Broadcast to all clients in this order's room
     const roomName = `order-${orderId}`;
     this.server.to(roomName).emit('chat:message', msg);
 
-    // Create notification for the recipient
-    // Fetch sender's full name from User collection
     let senderName = 'Someone';
-    if (senderId && Types.ObjectId.isValid(senderId)) {
+    if (Types.ObjectId.isValid(senderId)) {
       const sender = await this.userModel.findById(senderId).lean().exec();
       if (sender && sender.fullName) {
         senderName = sender.fullName;
@@ -133,14 +152,12 @@ export class ChatGateway implements OnGatewayConnection {
     }
 
     try {
-      // Use internal orders service to fetch order
       const order = await this.ordersService.findById(orderId, { role: 'ADMIN' });
       if (!order) {
         this.logger.warn(`Order ${orderId} not found for notification`);
-        return;
+        return msg;
       }
 
-      // 🔥 FIX: Safely extract recipient ID
       const safeExtractId = (value: any): string | null => {
         if (!value) return null;
         if (typeof value === 'string' && Types.ObjectId.isValid(value)) return value;
@@ -153,11 +170,9 @@ export class ChatGateway implements OnGatewayConnection {
       let notificationTitle = '';
 
       if (senderRole === 'CUSTOMER') {
-        // Recipient is tasker
         recipientId = safeExtractId(order.taskerId);
         notificationTitle = `Tin nhắn từ khách hàng`;
       } else if (senderRole === 'TASKER') {
-        // Recipient is customer
         recipientId = safeExtractId(order.customerId);
         notificationTitle = `Tin nhắn từ người thực hiện`;
       }
@@ -166,7 +181,7 @@ export class ChatGateway implements OnGatewayConnection {
         this.logger.warn(
           `Skip notification - invalid recipientId for order=${orderId}, sender=${senderId}, role=${senderRole}`,
         );
-        return;
+        return msg;
       }
 
       this.logger.debug(
@@ -184,5 +199,7 @@ export class ChatGateway implements OnGatewayConnection {
     } catch (err) {
       this.logger.error(`Failed to create notification: ${err.message}`);
     }
+
+    return msg;
   }
 }

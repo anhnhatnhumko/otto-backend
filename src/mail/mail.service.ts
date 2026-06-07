@@ -121,6 +121,19 @@ export class MailService implements OnModuleInit {
     }, 'otp-payment');
   }
 
+  async sendWithdrawOtpEmail(email: string, otp: string) {
+    await this.sendMailWithLogging({
+      to: email,
+      subject: 'OTP xac nhan rut tien OTTO',
+      html: `
+      <h3>Xac nhan rut tien</h3>
+      <p>Ma OTP cua ban:</p>
+      <h1>${otp}</h1>
+      <p>Het han sau 5 phut</p>
+    `,
+    }, 'otp-withdraw');
+  }
+
   async sendResetPasswordEmail(email: string, token: string) {
     const frontend = resolvePublicUrl(process.env.FRONTEND_URL, process.env.BACKEND_URL);
     const link = `${frontend}/reset-password?token=${encodeURIComponent(token)}`;

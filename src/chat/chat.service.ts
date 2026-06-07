@@ -31,12 +31,20 @@ export class ChatService {
       .exec();
   }
 
-  async markOrderMessagesAsRead(orderId: string) {
+  async markOrderMessagesAsRead(orderId: string, readerRole?: string) {
+    const normalizedReaderRole = String(readerRole ?? '').toUpperCase();
+    const senderRoleToMark =
+      normalizedReaderRole === 'TASKER'
+        ? 'CUSTOMER'
+        : normalizedReaderRole === 'CUSTOMER'
+          ? 'TASKER'
+          : undefined;
+
     const result = await this.chatModel.updateMany(
       {
         orderId,
-        senderRole: 'CUSTOMER',
         read: false,
+        ...(senderRoleToMark ? { senderRole: senderRoleToMark } : {}),
       },
       { $set: { read: true } }
     );

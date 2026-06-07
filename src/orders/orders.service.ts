@@ -926,6 +926,12 @@ export class OrdersService {
     order.status = OrderStatus.CANCELLED;
     await order.save();
 
+    const customer = await this.userModel
+      .findById(order.customerId)
+      .select('fullName email')
+      .lean();
+    const customerName = customer?.fullName || 'Khách hàng';
+
     console.log(`🔥 ORDER CANCELLED: ${order._id}, taskerId: ${order.taskerId}`);
 
     if (order.taskerId) {
@@ -943,7 +949,7 @@ export class OrdersService {
         // 🔥 THEN PERSIST NOTIFICATION TO DB (don't wait for it)
         this.notificationsService.createNotification(order.taskerId.toString(), {
           title: 'Khách hàng đã hủy dịch vụ',
-          content: `Đơn hàng ${order._id} đã bị khách hàng hủy.`,
+          content: `Đơn hàng ${order.serviceSnapshot?.name || 'Dịch vụ'} đã bị hủy bởi khách hàng ${customerName}.`,
           type: 'order_cancelled',
           orderId: order._id.toString(),
           senderId: order.customerId.toString(),
@@ -955,11 +961,10 @@ export class OrdersService {
 
     // Send cancellation emails to customer and tasker
     try {
-      const customer = await this.userModel.findById(order.customerId).lean();
       if (customer?.email) {
         await this.mailService.sendOrderCancelledEmail(
           customer.email,
-          customer.fullName || 'Khách hàng',
+          customerName,
           order._id.toString(),
           order.serviceSnapshot?.name || 'Dịch vụ',
           order.isRefunded ? order.totalPrice : order.totalPrice,
@@ -978,7 +983,7 @@ export class OrdersService {
             tasker.fullName || 'Tasker',
             order._id.toString(),
             order.serviceSnapshot?.name || 'Dịch vụ',
-            (await this.userModel.findById(order.customerId))?.fullName || '',
+            customerName,
           );
         }
       } catch (err) {

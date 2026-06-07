@@ -11,19 +11,25 @@ export class ChatController {
     private chatGateway: ChatGateway,
   ) {}
 
+  @UseGuards(JwtAuthGuard)
   @Get('orders/:orderId/messages')
   async getMessages(
     @Param('orderId') orderId: string,
     @Query('limit') limit = '200',
+    @CurrentUser() _user: any,
   ) {
     const n = parseInt(limit as string, 10) || 200;
     const msgs = await this.chatService.findByOrderId(orderId, n);
     return msgs;
   }
 
+  @UseGuards(JwtAuthGuard)
   @Patch('orders/:orderId/messages/mark-read')
-  async markMessagesAsRead(@Param('orderId') orderId: string) {
-    return this.chatService.markOrderMessagesAsRead(orderId);
+  async markMessagesAsRead(
+    @Param('orderId') orderId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.chatService.markOrderMessagesAsRead(orderId, user?.role);
   }
 
   @UseGuards(JwtAuthGuard)

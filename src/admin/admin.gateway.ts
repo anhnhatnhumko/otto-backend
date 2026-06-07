@@ -11,8 +11,16 @@ import { Server, Socket } from 'socket.io';
 const SOCKET_ALLOWED_ORIGINS = [
     'https://ottohome.online',
     'https://www.ottohome.online',
+    'http://localhost',
     'http://localhost:3000',
+    'http://localhost:8081',
+    'http://localhost:19000',
+    'http://localhost:19006',
+    'http://127.0.0.1',
     'http://127.0.0.1:3000',
+    'http://127.0.0.1:8081',
+    'http://127.0.0.1:19000',
+    'http://127.0.0.1:19006',
 ];
 
 @WebSocketGateway({
@@ -21,6 +29,22 @@ const SOCKET_ALLOWED_ORIGINS = [
 export class AdminGateway implements OnGatewayConnection {
     @WebSocketServer()
     server: Server;
+
+    private normalizeEntityId(value: unknown) {
+        if (!value) return "";
+        if (typeof value === "string") return value;
+        if (typeof value === "object") {
+            const record = value as { _id?: unknown; id?: unknown };
+            if (record._id) return String(record._id);
+            if (record.id) return String(record.id);
+        }
+        return "";
+    }
+
+    private emitToUserRoom(userId: string, eventName: string, payload: unknown) {
+        if (!userId) return;
+        this.server.to(`user-${userId}`).emit(eventName, payload);
+    }
 
     handleConnection(client: Socket) {
         const roleFromAuth = String(client.handshake.auth?.role ?? '').toUpperCase();
@@ -135,11 +159,15 @@ export class AdminGateway implements OnGatewayConnection {
         const status = order?.status;
         const paymentStatus = order?.paymentStatus;
         const isPaid = order?.isPaid;
+        const customerId = this.normalizeEntityId(order?.customerId);
+        const taskerId = this.normalizeEntityId(order?.taskerId);
 
         this.emitToAdmins('admin:order-updated', order);
         this.emitToAdmins('admin:orders:updated', order);
         this.emitToAdmins('order:updated', order);
         this.emitToOrderRoom(orderId, 'order:updated', order);
+        this.emitToUserRoom(customerId, 'order:updated', order);
+        this.emitToUserRoom(taskerId, 'order:updated', order);
 
         if (orderId || status) {
             const statusPayload = {
@@ -155,6 +183,8 @@ export class AdminGateway implements OnGatewayConnection {
             this.emitToAdmins('admin:orders:status-updated', statusPayload);
             this.emitToAdmins('order:status-updated', statusPayload);
             this.emitToOrderRoom(orderId, 'order:status-updated', statusPayload);
+            this.emitToUserRoom(customerId, 'order:status-updated', statusPayload);
+            this.emitToUserRoom(taskerId, 'order:status-updated', statusPayload);
         }
     }
 

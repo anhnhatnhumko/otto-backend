@@ -1,80 +1,92 @@
 import {
-    Controller,
-    Get,
-    Post,
-    Body,
-    Req,
-    Param,
-    UseGuards,
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Req,
+  UseGuards,
 } from '@nestjs/common';
-import { WalletService } from './wallet.service';
-import { DepositDto } from './dto/deposit.dto';
 import { JwtAuthGuard } from 'src/common/guards/jwt.guard';
+import { DepositDto } from './dto/deposit.dto';
+import { VerifyWithdrawOtpDto } from './dto/verify-withdraw-otp.dto';
 import { WithdrawDto } from './dto/withdraw.dto';
-import { PaymentOrchestratorService } from 'src/payments/payment-orchestrator.service';
-import { OrdersService } from 'src/orders/orders.service';
-
+import { WalletService } from './wallet.service';
 
 @UseGuards(JwtAuthGuard)
 @Controller('wallet')
 export class WalletController {
-    constructor(
-        private walletService: WalletService,
-        // private paymentOrchestrator: PaymentOrchestratorService,
-    ) { }
+  constructor(private walletService: WalletService) {}
 
-    @Get()
-    getWallet(@Req() req) {
-        console.log("🔥 COOKIE:", req.cookies);
-        console.log("🔥 USER:", req.user);
-        return this.walletService.getWallet(req.user.userId);
-    }
+  @Get()
+  getWallet(@Req() req) {
+    console.log('ðŸ”¥ COOKIE:', req.cookies);
+    console.log('ðŸ”¥ USER:', req.user);
+    return this.walletService.getWallet(req.user.userId);
+  }
 
-    @Get('transactions')
-    getTransactions(@Req() req) {
-        return this.walletService.getTransactions(req.user.userId);
-    }
+  @Get('transactions')
+  getTransactions(@Req() req) {
+    return this.walletService.getTransactions(req.user.userId);
+  }
 
-    @Post('deposit')
-    deposit(@Req() req, @Body() dto: DepositDto) {
-        console.log("🔥 CONTROLLER HIT DEPOSIT");
-        console.log("🔥 BODY:", dto);
-        console.log("🔥 USER:", req.user);
-        return this.walletService.deposit(req.user.userId, dto.amount);
-    }
+  @Post('deposit')
+  deposit(@Req() req, @Body() dto: DepositDto) {
+    console.log('ðŸ”¥ CONTROLLER HIT DEPOSIT');
+    console.log('ðŸ”¥ BODY:', dto);
+    console.log('ðŸ”¥ USER:', req.user);
+    return this.walletService.deposit(req.user.userId, dto.amount);
+  }
 
-    // MOCK webhook/test
-    // @Post('success/:id')
-    // simulateSuccess(@Param('id') id: string) {
-    //     return this.walletService.handleStripeSuccess(id);
-    // }
+  // MOCK webhook/test
+  // @Post('success/:id')
+  // simulateSuccess(@Param('id') id: string) {
+  //   return this.walletService.handleStripeSuccess(id);
+  // }
 
-    @Post('success/deposit/:id')
-    simulateDeposit(@Param('id') id: string) {
-        console.log("🔥 SIMULATE DEPOSIT:", id);
-        return this.walletService.handleStripeSuccess(id);
-    }
+  @Post('success/deposit/:id')
+  simulateDeposit(@Param('id') id: string) {
+    console.log('ðŸ”¥ SIMULATE DEPOSIT:', id);
+    return this.walletService.handleStripeSuccess(id);
+  }
 
-    @Post('success/order')
-    simulateOrder(@Body() body: {
-        userId: string;
-        orderId: string;
-        amount: number;
-    }) {
-        console.log("🔥 SIMULATE ORDER:", body);
+  @Post('success/order')
+  simulateOrder(
+    @Body()
+    body: {
+      userId: string;
+      orderId: string;
+      amount: number;
+    },
+  ) {
+    console.log('ðŸ”¥ SIMULATE ORDER:', body);
 
-        return this.walletService.createEscrowTransaction({
-            userId: body.userId,
-            orderId: body.orderId,
-            amount: body.amount,
-        });
-    }
+    return this.walletService.createEscrowTransaction({
+      userId: body.userId,
+      orderId: body.orderId,
+      amount: body.amount,
+    });
+  }
 
-    @Post('withdraw')
-    withdraw(@Req() req, @Body() dto: WithdrawDto) {
-        console.log("🔥 CONTROLLER HIT WITHDRAW");
-        console.log("🔥 BODY:", dto);
-        console.log("🔥 USER:", req.user);
-        return this.walletService.withdraw(req.user.userId, dto);
-    }
+  @Post('withdraw')
+  withdraw(@Req() req, @Body() dto: WithdrawDto) {
+    console.log('ðŸ”¥ CONTROLLER HIT WITHDRAW');
+    console.log('ðŸ”¥ BODY:', dto);
+    console.log('ðŸ”¥ USER:', req.user);
+    return this.walletService.withdraw(req.user.userId, dto);
+  }
+
+  @Post('withdraw/request')
+  requestWithdrawOtp(@Req() req, @Body() dto: WithdrawDto) {
+    return this.walletService.requestWithdrawOtp(req.user.userId, dto);
+  }
+
+  @Post('withdraw/verify')
+  verifyWithdrawOtp(@Req() req, @Body() dto: VerifyWithdrawOtpDto) {
+    return this.walletService.verifyWithdrawOtp(
+      req.user.userId,
+      dto.transactionId,
+      dto.otp,
+    );
+  }
 }

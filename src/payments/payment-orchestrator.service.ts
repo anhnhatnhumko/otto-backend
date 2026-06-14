@@ -122,20 +122,20 @@ export class PaymentOrchestratorService {
     async handleStripeOrder(meta: any) {
         const { orderId, userId } = meta;
 
-        // 🔥 IDEMPOTENT CHECK
+        // IDEMPOTENT CHECK
         const exists = await this.txModel.findOne({
             externalId: `STRIPE_${orderId}`,
         });
 
         if (exists) {
-            console.log("⚠️ Already processed");
+            console.log("Already processed");
             return;
         }
 
         const order = await this.orderModel.findById(orderId);
         if (!order) throw new NotFoundException();
 
-        // 🔥 1. CREATE TRANSACTION
+        // 1. CREATE TRANSACTION
         await this.txModel.create({
             userId,
             orderId,
@@ -146,22 +146,22 @@ export class PaymentOrchestratorService {
             paymentMethod: 'STRIPE',
         });
 
-        // 🔥 2. ESCROW
+        // 2. ESCROW
         await this.walletService.createEscrowTransaction({
             userId,
             orderId,
             amount: order.totalPrice,
+            paymentMethod: 'STRIPE',
         });
 
-        // 🔥 3. MARK PAID
+        // 3. MARK PAID
         const updated = await this.orderService.markAsPaid(orderId, userId);
 
-        // 🔥 4. DISPATCH
+        // 4. DISPATCH
         await this.orderService.dispatchTasker(updated);
 
         return;
     }
-
     async verifyWalletPayment(userId: string, txId: string, otp: string) {
         const tx = await this.txModel.findById(txId);
 
@@ -171,28 +171,21 @@ export class PaymentOrchestratorService {
 
         const amount = Math.abs(tx.amount);
 
-        // 🔥 TRỪ TIỀN + ESCROW
-        await this.walletModel.updateOne(
-            { userId },
-            {
-                $inc: {
-                    balance: -amount,
-                    pendingBalance: amount,
-                },
-            },
-        );
+        await this.walletService.moveBalanceToEscrow({
+            userId,
+            orderId: tx.orderId.toString(),
+            amount,
+            paymentMethod: 'WALLET',
+        });
 
-        // 🔥 MARK TX
         tx.status = TransactionStatus.SUCCESS;
         await tx.save();
 
-        // 🔥 MARK ORDER
         const order = await this.orderService.markAsPaid(
             tx.orderId.toString(),
             userId,
         );
 
-        // 🔥 DISPATCH
         await this.orderService.dispatchTasker(order);
 
         return { success: true };
@@ -207,12 +200,13 @@ export class PaymentOrchestratorService {
         }
 
         return this.walletService.releaseEscrow(
+            order._id.toString(),
             order.customerId.toString(),
             order.taskerId.toString(),
             order.totalPrice,
+            String(order.paymentMethod || '').toUpperCase(),
         );
     }
-
     
 
     private async refundOrder(
@@ -262,3 +256,4 @@ export class PaymentOrchestratorService {
         });
     }
 }
+

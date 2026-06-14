@@ -553,6 +553,17 @@ export class AdminService {
         };
 
         this.adminGateway.emitTaskerUpdated(mapped);
+        this.adminGateway.emitForceLogout(user._id.toString(), {
+            reason: 'ACCOUNT_BANNED',
+            message:
+                'Tài khoản Tasker của bạn đã bị khóa bởi quản trị viên. Vui lòng liên hệ hỗ trợ để biết thêm chi tiết.',
+        });
+
+        void this.mailService
+            .sendAccountBannedEmail(user.email, user.fullName || 'bạn', user.role)
+            .catch((err) => {
+                console.warn('Failed to send banned account email to tasker', err);
+            });
 
         return mapped;
     }
@@ -602,6 +613,17 @@ export class AdminService {
         }
 
         this.adminGateway.emitUserUpdated(user);
+        this.adminGateway.emitForceLogout(user._id.toString(), {
+            reason: 'ACCOUNT_BANNED',
+            message:
+                'Tài khoản của bạn đã bị khóa bởi quản trị viên. Vui lòng liên hệ hỗ trợ để biết thêm chi tiết.',
+        });
+
+        void this.mailService
+            .sendAccountBannedEmail(user.email, user.fullName || 'bạn', user.role)
+            .catch((err) => {
+                console.warn('Failed to send banned account email to user', err);
+            });
 
         return {
             id: user._id.toString(),

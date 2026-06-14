@@ -108,6 +108,15 @@ export class AdminGateway implements OnGatewayConnection {
         this.emitToAdmins('admin:users:updated', user);
     }
 
+    emitForceLogout(userId: string, payload?: { reason?: string; message?: string }) {
+        this.emitToUserRoom(userId, 'auth:force-logout', {
+            reason: payload?.reason ?? 'ACCOUNT_BANNED',
+            message:
+                payload?.message ??
+                'Tài khoản của bạn đã bị khóa bởi quản trị viên. Vui lòng liên hệ hỗ trợ để biết thêm chi tiết.',
+        });
+    }
+
     emitUserCreated(user: any) {
         this.emitToAdmins('admin:user-created', user);
         this.emitToAdmins('admin:users:created', user);

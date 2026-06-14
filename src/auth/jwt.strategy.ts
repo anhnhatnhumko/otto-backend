@@ -39,11 +39,15 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
   async validate(payload: any) {
     const user = await this.userModel.findById(payload.sub).select(
-      'isEmailVerified email role',
+      'isEmailVerified email role status',
     );
 
     if (!user) {
       throw new UnauthorizedException('Người dùng không tồn tại');
+    }
+
+    if (user.status === 'BLOCKED') {
+      throw new UnauthorizedException('Tài khoản đã bị khóa');
     }
 
     if (!user.isEmailVerified) {

@@ -352,11 +352,16 @@ export class WalletService {
     userId,
     orderId,
     amount,
+    paymentMethod = 'STRIPE',
   }: {
     userId: string;
     orderId: string;
     amount: number;
+    paymentMethod?: string;
   }) {
+    const userObjectId = new Types.ObjectId(userId);
+    const orderObjectId = new Types.ObjectId(orderId);
+
     const exists = await this.txModel.findOne({
       externalId: `ESCROW_${orderId}`,
     });
@@ -364,30 +369,96 @@ export class WalletService {
     if (exists) return exists;
 
     await this.walletModel.updateOne(
-      { userId },
+      { userId: userObjectId },
       {
         $inc: { pendingBalance: amount },
+        $setOnInsert: { balance: 0, totalEarning: 0 },
       },
       { upsert: true },
     );
 
     return this.txModel.create({
-      userId,
-      orderId,
+      userId: userObjectId,
+      orderId: orderObjectId,
       amount: -amount,
-      type: 'PAYMENT',
-      status: 'PENDING',
+      type: TransactionType.PAYMENT,
+      status: TransactionStatus.PENDING,
       externalId: `ESCROW_${orderId}`,
-      paymentMethod: 'STRIPE',
+      paymentMethod,
     });
   }
 
-  async releaseEscrow(customerId: string, taskerId: string, amount: number) {
+  async moveBalanceToEscrow({
+    userId,
+    orderId,
+    amount,
+    paymentMethod = 'WALLET',
+  }: {
+    userId: string;
+    orderId: string;
+    amount: number;
+    paymentMethod?: string;
+  }) {
+    const userObjectId = new Types.ObjectId(userId);
+    const orderObjectId = new Types.ObjectId(orderId);
+
+    const exists = await this.txModel.findOne({
+      externalId: `ESCROW_${orderId}`,
+    });
+
+    if (exists) return exists;
+
+    const walletUpdate = await this.walletModel.updateOne(
+      {
+        userId: userObjectId,
+        balance: { $gte: amount },
+      },
+      {
+        $inc: { balance: -amount, pendingBalance: amount },
+        $setOnInsert: { totalEarning: 0 },
+      },
+    );
+
+    if (walletUpdate.modifiedCount === 0) {
+      throw new BadRequestException('Insufficient balance');
+    }
+
+    return this.txModel.create({
+      userId: userObjectId,
+      orderId: orderObjectId,
+      amount: -amount,
+      type: TransactionType.PAYMENT,
+      status: TransactionStatus.PENDING,
+      externalId: `ESCROW_${orderId}`,
+      paymentMethod,
+    });
+  }
+
+  async releaseEscrow(
+    orderId: string,
+    customerId: string,
+    taskerId: string,
+    amount: number,
+    paymentMethod = 'SYSTEM',
+  ) {
     console.log('RELEASE ESCROW START');
+
+    const orderObjectId = new Types.ObjectId(orderId);
+    const customerObjectId = new Types.ObjectId(customerId);
+    const taskerObjectId = new Types.ObjectId(taskerId);
+    const taskerReleaseExternalId = `RELEASE_TASKER_${orderId}`;
+
+    const existingRelease = await this.txModel.findOne({
+      externalId: taskerReleaseExternalId,
+    });
+
+    if (existingRelease) {
+      return existingRelease;
+    }
 
     const customerUpdate = await this.walletModel.updateOne(
       {
-        userId: new Types.ObjectId(customerId),
+        userId: customerObjectId,
         pendingBalance: { $gte: amount },
       },
       {
@@ -400,7 +471,7 @@ export class WalletService {
     }
 
     await this.walletModel.updateOne(
-      { userId: new Types.ObjectId(taskerId) },
+      { userId: taskerObjectId },
       {
         $inc: { balance: amount, totalEarning: amount },
         $setOnInsert: { pendingBalance: 0 },
@@ -409,26 +480,35 @@ export class WalletService {
     );
 
     await this.txModel.updateOne(
-      { externalId: `ORDER_${customerId}_${taskerId}` },
+      { externalId: `ESCROW_${orderId}` },
+      { $set: { status: TransactionStatus.SUCCESS } },
+    );
+
+    await this.txModel.updateOne(
+      { externalId: `RELEASE_CUSTOMER_${orderId}` },
       {
         $setOnInsert: {
-          userId: new Types.ObjectId(customerId),
+          userId: customerObjectId,
+          orderId: orderObjectId,
           amount: -amount,
           type: TransactionType.PAYMENT,
           status: TransactionStatus.SUCCESS,
+          paymentMethod,
         },
       },
       { upsert: true },
     );
 
     await this.txModel.updateOne(
-      { externalId: `ORDER_${taskerId}_${customerId}` },
+      { externalId: taskerReleaseExternalId },
       {
         $setOnInsert: {
-          userId: new Types.ObjectId(taskerId),
+          userId: taskerObjectId,
+          orderId: orderObjectId,
           amount,
           type: TransactionType.RECEIVE,
           status: TransactionStatus.SUCCESS,
+          paymentMethod,
         },
       },
       { upsert: true },
@@ -443,7 +523,7 @@ export class WalletService {
     await this.walletModel.updateOne(
       { userId: new Types.ObjectId(taskerId) },
       {
-        $inc: { totalEarning: amount },
+        $inc: { balance: amount, totalEarning: amount },
         $setOnInsert: { pendingBalance: 0 },
       },
       { upsert: true },
@@ -460,17 +540,26 @@ export class WalletService {
   }
 
   async refundEscrow(userId: string, amount: number) {
-    await this.walletModel.findOneAndUpdate(
-      { userId: new Types.ObjectId(userId) },
-      { $inc: { balance: amount } },
+    const userObjectId = new Types.ObjectId(userId);
+
+    const walletUpdate = await this.walletModel.updateOne(
+      {
+        userId: userObjectId,
+        pendingBalance: { $gte: amount },
+      },
+      { $inc: { balance: amount, pendingBalance: -amount } },
     );
 
+    if (walletUpdate.modifiedCount === 0) {
+      throw new BadRequestException('Invalid escrow state');
+    }
+
     await this.txModel.create({
-      userId: new Types.ObjectId(userId),
+      userId: userObjectId,
       amount,
       type: TransactionType.REFUND,
       status: TransactionStatus.SUCCESS,
-      externalId: `REFUND_${Date.now()}`,
+      externalId: `REFUND_${Date.now()}_${userId}`,
       paymentMethod: 'SYSTEM',
     });
   }

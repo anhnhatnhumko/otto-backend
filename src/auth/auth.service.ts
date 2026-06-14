@@ -90,6 +90,12 @@ export class AuthService {
       throw new UnauthorizedException('Email hoặc mật khẩu không đúng');
     }
 
+    if (user.status === 'BLOCKED') {
+      throw new UnauthorizedException(
+        'Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên để được hỗ trợ.',
+      );
+    }
+
     if (!user.isEmailVerified) {
       throw new UnauthorizedException(
         'Email chưa được xác thực. Vui lòng kiểm tra hộp thư của bạn.',

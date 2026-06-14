@@ -186,6 +186,31 @@ export class MailService implements OnModuleInit {
     console.log('✅ Email tasker mới đã gửi thành công tới:', email);
   }
 
+  async sendAccountBannedEmail(email: string, fullName: string, role?: string) {
+    const roleLabel =
+      role === 'TASKER'
+        ? 'Tasker'
+        : role === 'ADMIN'
+          ? 'quản trị viên'
+          : 'khách hàng';
+
+    await this.sendMailWithLogging({
+      to: email,
+      subject: 'Tài khoản Otto của bạn đã bị khóa',
+      html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2>Xin chào ${fullName || 'bạn'},</h2>
+        <p>Tài khoản ${roleLabel} của bạn trên Otto đã bị khóa bởi quản trị viên.</p>
+        <p>Trong thời gian bị khóa, bạn sẽ không thể đăng nhập hoặc tiếp tục sử dụng các chức năng của hệ thống.</p>
+        <p>Nếu bạn cho rằng đây là nhầm lẫn hoặc cần thêm thông tin, vui lòng liên hệ đội ngũ hỗ trợ của Otto để được kiểm tra.</p>
+        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
+        <p style="color: #6b7280; font-size: 12px;">Email này được gửi tự động từ hệ thống Otto.</p>
+      </div>
+      `,
+      text: `Tài khoản Otto của bạn đã bị khóa bởi quản trị viên. Vui lòng liên hệ hỗ trợ nếu cần thêm thông tin.`,
+    }, 'account-banned');
+  }
+
   async sendOrderAcceptedEmail(
     email: string,
     customerName: string,

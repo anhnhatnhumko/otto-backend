@@ -62,12 +62,12 @@ export class OrdersService {
       .lean()) as any;
     if (!user) return;
 
-    // Tính order count
+    // Calculate order count
     const orderCount = await this.orderModel.countDocuments({
       customerId: user._id,
     });
 
-    // Tính totalSpent cho CUSTOMER
+    // Calculate total spent for customer
     let totalSpent = 0;
     if (user.role === 'CUSTOMER') {
       const result = await this.orderModel.aggregate([
@@ -77,7 +77,7 @@ export class OrdersService {
       totalSpent = result[0]?.total ?? 0;
     }
 
-    // Tính earnings cho TASKER từ completed orders
+    // Calculate earnings for tasker from completed orders
     let earnings = 0;
     if (user.role === 'TASKER') {
       const result = await this.orderModel.aggregate([
@@ -87,7 +87,7 @@ export class OrdersService {
       earnings = result[0]?.total ?? 0;
     }
 
-    // Build address từ province + ward
+    // Build address from province + ward
     const provinceName = user.provinceId?.name || "";
     const wardName = user.wardId?.name || "";
     const address = buildFullAddress(provinceName, wardName);
@@ -139,8 +139,8 @@ export class OrdersService {
       await this.emitOrderUpdateById(order._id as Types.ObjectId);
 
       await this.notificationsService.createNotification(String(order.customerId), {
-        title: 'Đơn hàng sắp quá hạn',
-        content: 'Tasker chưa bắt đầu công việc sau giờ hẹn. Vui lòng kiểm tra đơn hàng của bạn.',
+        title: '\u0110\u01a1n h\u00e0ng s\u1eafp qu\u00e1 h\u1ea1n',
+        content: 'Tasker ch\u01b0a b\u1eaft \u0111\u1ea7u c\u00f4ng vi\u1ec7c sau gi\u1edd h\u1eb9n. Vui l\u00f2ng ki\u1ec3m tra \u0111\u01a1n h\u00e0ng c\u1ee7a b\u1ea1n.',
         type: 'order_overdue_warning',
         orderId: String(order._id),
       });
@@ -201,7 +201,7 @@ export class OrdersService {
     });
 
     if (overlap) {
-      throw new BadRequestException('Bạn đã có lịch trùng thời gian này');
+      throw new BadRequestException('Bạn đã có lịch trùng trong khung giờ này');
     }
 
     if (totalHours < service.minHours) {
@@ -216,12 +216,12 @@ export class OrdersService {
       );
     }
 
-    // 🔥 XÁC ĐỊNH PAYMENT METHOD
+    // Determine payment method
     const isCash = dto.paymentMethod === 'cash';
 
     let availableTaskers: any[] = [];
 
-    // 🔥 CHỈ MATCH TASKER NẾU CASH
+    // Match taskers first for cash orders
     if (isCash) {
       const busyTaskers = await this.orderModel.find({
         status: {
@@ -253,7 +253,7 @@ export class OrdersService {
       }
     }
 
-    // 🔥 TẠO ORDER
+    // Create order
     const order = await this.orderModel.create({
       customerId: new Types.ObjectId(customerId),
       serviceId: new Types.ObjectId(dto.serviceId),
@@ -271,14 +271,14 @@ export class OrdersService {
       totalHours,
       totalPrice: totalHours * service.pricePerHour,
       note: dto.note,
-      paymentMethod: dto.paymentMethod, // 🔥 THÊM DÒNG NÀY
+      paymentMethod: dto.paymentMethod, // Save payment method
 
-      // 🔥 QUAN TRỌNG NHẤT
+      // Important default status
       status: isCash
         ? OrderStatus.SEARCHING
         : OrderStatus.PENDING_PAYMENT,
 
-      // 🔥 CHỈ ASSIGN NẾU CASH
+      // Pre-assign offers for cash orders
       offeredTaskers: isCash
         ? availableTaskers.map(t => t._id)
         : [],
@@ -302,13 +302,13 @@ export class OrdersService {
   }
 
   async dispatchTasker(order: any) {
-    console.log("🔥 ===== DISPATCH START =====");
-    // 🔥 1. VALIDATE STATE
+    console.log("===== DISPATCH START =====");
+    // 1. Validate state
     if (order.status !== OrderStatus.PAID) {
       throw new BadRequestException('Order not ready for dispatch');
     }
 
-    // 🔥 tránh dispatch 2 lần
+    // Avoid dispatching the same order twice
     if (order.offeredTaskers && order.offeredTaskers.length > 0) {
       return order;
     }
@@ -316,7 +316,7 @@ export class OrdersService {
     const start = order.startTime;
     const end = order.endTime;
 
-    // 🔥 2. TÌM TASKER BẬN
+    // 2. Find busy taskers
     const busyTaskers = await this.orderModel.find({
       status: {
         $in: [
@@ -328,7 +328,7 @@ export class OrdersService {
       endTime: { $gt: start },
     }).distinct('taskerId');
 
-    // 🔥 3. TÌM TASKER AVAILABLE
+    // 3. Find available taskers
     // Exclude busy taskers and any taskers who previously rejected this order
     const excludeIds = busyTaskers.filter(Boolean).concat(order.rejectedTaskers || []);
 
@@ -345,15 +345,15 @@ export class OrdersService {
       .sort({ rating: -1 })
       .limit(20);
 
-    console.log("👉 availableTaskers:", availableTaskers);
-    console.log("👉 count:", availableTaskers.length);
+    console.log("availableTaskers:", availableTaskers);
+    console.log("availableTasker count:", availableTaskers.length);
 
     if (!availableTaskers.length) {
 
       throw new BadRequestException('Không có tasker phù hợp');
     }
 
-    // 🔥 4. UPDATE ATOMIC (QUAN TRỌNG)
+    // 4. Atomic update
     const updated = await this.orderModel.findOneAndUpdate(
       {
         _id: order._id,
@@ -363,7 +363,7 @@ export class OrdersService {
         $set: {
           status: OrderStatus.SEARCHING,
           offeredTaskers: availableTaskers.map(t => t._id),
-          offerExpiresAt: new Date(Date.now() + 60 * 1000), // 1 phút để tasker nhận việc
+          offerExpiresAt: new Date(Date.now() + 60 * 1000), // give tasker 1 minute to accept
         },
       },
       { new: true },
@@ -436,7 +436,7 @@ export class OrdersService {
         tasker: t
           ? {
             name: t.fullName,
-            avatar: t.avatar, // 🔥 CHÍNH DÒNG BỊ THIẾU
+            avatar: t.avatar, // Keep avatar in payload
             rating: t.rating,
             completedJobs: t.totalJobs,
             phone: t.phone,
@@ -552,7 +552,7 @@ export class OrdersService {
       throw new NotFoundException('Order not found');
     }
 
-    // 🔥 CHECK TRÙNG LỊCH TASKER
+    // Check tasker schedule conflicts
     const conflict = await this.orderModel.findOne({
       taskerId: new Types.ObjectId(taskerId),
       status: {
@@ -571,7 +571,7 @@ export class OrdersService {
       );
     }
 
-    // 🔥 ATOMIC ACCEPT
+    // Atomic accept
     const updated = await this.orderModel.findOneAndUpdate(
       {
         _id: new Types.ObjectId(orderId),
@@ -593,32 +593,17 @@ export class OrdersService {
 
     await this.emitOrderUpdateById(updated._id as Types.ObjectId);
 
-    // 🔥 GET TASKER AND CUSTOMER INFO
+    // Get tasker and customer info
     const tasker = await this.userModel.findById(taskerId).lean();
     const customer = await this.userModel.findById(order.customerId).lean();
 
-    if (customer && customer.email) {
-      // 🔥 SEND EMAIL TO CUSTOMER
-      try {
-        await this.mailService.sendOrderAcceptedEmail(
-          customer.email,
-          customer.fullName,
-          tasker?.fullName || 'Tasker',
-          orderId,
-          order.serviceSnapshot?.name || 'Dịch vụ'
-        );
-      } catch (err) {
-        console.error('Failed to send email:', err);
-      }
-    }
-
     if (customer) {
-      // 🔥 SEND NOTIFICATION TO CUSTOMER
+      // Send notification to customer immediately for realtime
       await this.notificationsService.createNotification(
         customer._id.toString(),
         {
-          title: 'Đơn hàng được nhận',
-          content: `${tasker?.fullName || 'Tasker'} đã nhận đơn hàng của bạn`,
+          title: '\u0110\u01a1n h\u00e0ng \u0111\u01b0\u1ee3c nh\u1eadn',
+          content: `${tasker?.fullName || 'Tasker'} \u0111\u00e3 nh\u1eadn \u0111\u01a1n h\u00e0ng c\u1ee7a b\u1ea1n`,
           type: 'order_accepted',
           orderId: orderId,
           senderId: taskerId,
@@ -626,6 +611,20 @@ export class OrdersService {
         }
       );
     }
+
+    if (customer && customer.email) {
+      // Send email in background so it does not block realtime
+      void this.mailService.sendOrderAcceptedEmail(
+        customer.email,
+        customer.fullName,
+        tasker?.fullName || 'Tasker',
+        orderId,
+        order.serviceSnapshot?.name || 'Dịch vụ'
+      ).catch((err) => {
+        console.error('Failed to send email:', err);
+      });
+    }
+
 
     return updated;
   }
@@ -690,14 +689,14 @@ export class OrdersService {
 
     await this.emitOrderUpdateById(order._id as Types.ObjectId);
 
-    // 🔥 SEND NOTIFICATION TO CUSTOMER WHEN TASKER COMPLETES
+    // Send notification to customer when tasker completes
     const tasker = await this.userModel.findById(taskerId).lean();
     if (order.customerId) {
       await this.notificationsService.createNotification(
         order.customerId.toString(),
         {
-          title: 'Công việc đã hoàn thành',
-          content: `${tasker?.fullName || 'Tasker'} đã hoàn thành công việc. Vui lòng xác nhận.`,
+          title: 'C\u00f4ng vi\u1ec7c \u0111\u00e3 ho\u00e0n th\u00e0nh',
+          content: `${tasker?.fullName || 'Tasker'} \u0111\u00e3 ho\u00e0n th\u00e0nh c\u00f4ng vi\u1ec7c. Vui l\u00f2ng x\u00e1c nh\u1eadn.`,
           type: 'order_completed_confirmation',
           orderId: String(order._id),
           senderId: taskerId,
@@ -711,17 +710,17 @@ export class OrdersService {
 
   async confirmCompleted(orderId: string, customerId: string) {
 
-    console.log("🔥 BE RECEIVED orderId:", orderId);
-    console.log("🔥 TYPE:", typeof orderId);
+    console.log("confirmCompleted received orderId:", orderId);
+    console.log("orderId type:", typeof orderId);
     const order = await this.orderModel.findOneAndUpdate(
       {
         _id: orderId,
         status: OrderStatus.WAITING_CONFIRMATION,
-        customerId: new Types.ObjectId(customerId), // 🔥 FIX
+        customerId: new Types.ObjectId(customerId), // ensure the current customer confirms
       },
       {
         status: OrderStatus.COMPLETED,
-        confirmedAt: new Date(), // 🔥 FIX
+        confirmedAt: new Date(), // record confirmation time
       },
       { new: true },
     );
@@ -741,12 +740,12 @@ export class OrdersService {
 
     await this.emitOrderUpdateById(order._id as Types.ObjectId);
 
-    // 🔥 GET TASKER AND CUSTOMER INFO
+    // Get tasker and customer info
     const tasker = await this.userModel.findById(order.taskerId).lean();
     const customer = await this.userModel.findById(order.customerId).lean();
 
     if (customer && customer.email) {
-      // 🔥 GENERATE BILL HTML
+      // Generate bill HTML
       const billHtml = `
         <table style="width: 100%; border-collapse: collapse; background-color: #fff; border: 1px solid #e5e7eb; border-radius: 5px; overflow: hidden;">
           <thead>
@@ -768,7 +767,7 @@ export class OrdersService {
         </table>
       `;
 
-      // 🔥 SEND EMAIL TO CUSTOMER
+      // Send email to customer
       try {
         await this.mailService.sendOrderCompletedEmail(
           customer.email,
@@ -785,12 +784,12 @@ export class OrdersService {
     }
 
     if (customer) {
-      // 🔥 SEND NOTIFICATION TO CUSTOMER
+      // Send notification to customer
       await this.notificationsService.createNotification(
         customer._id.toString(),
         {
-          title: 'Đơn hàng hoàn thành',
-          content: `Đơn hàng của bạn đã hoàn thành. Vui lòng kiểm tra email để xem hóa đơn.`,
+          title: '\u0110\u01a1n h\u00e0ng ho\u00e0n th\u00e0nh',
+          content: `\u0110\u01a1n h\u00e0ng c\u1ee7a b\u1ea1n \u0111\u00e3 ho\u00e0n th\u00e0nh. Vui l\u00f2ng ki\u1ec3m tra email \u0111\u1ec3 xem h\u00f3a \u0111\u01a1n.`,
           type: 'order_completed',
           orderId: orderId,
           senderId: order.taskerId?.toString(),
@@ -863,7 +862,7 @@ export class OrdersService {
     const order = await this.orderModel.findOneAndUpdate(
       {
         _id: orderId,
-        customerId: new Types.ObjectId(userId), // 🔥 chống hack
+        customerId: new Types.ObjectId(userId), // prevent spoofing
         status: OrderStatus.PENDING_PAYMENT,
       },
       {
@@ -930,15 +929,15 @@ export class OrdersService {
       .findById(order.customerId)
       .select('fullName email')
       .lean();
-    const customerName = customer?.fullName || 'Khách hàng';
+    const customerName = customer?.fullName || 'Kh\u00e1ch h\u00e0ng';
 
-    console.log(`🔥 ORDER CANCELLED: ${order._id}, taskerId: ${order.taskerId}`);
+    console.log(`ORDER CANCELLED: ${order._id}, taskerId: ${order.taskerId}`);
 
     if (order.taskerId) {
       try {
-        console.log(`📢 Emitting order:cancelled for order ${order._id}`);
+        console.log(`Emitting order:cancelled for order ${order._id}`);
         
-        // 🔥 FORCE REALTIME EMISSION IMMEDIATELY
+        // Force realtime emission immediately
         this.adminGateway.emitOrderCancelled({
           orderId: order._id.toString(),
           taskerId: order.taskerId.toString(),
@@ -946,10 +945,10 @@ export class OrdersService {
           serviceName: order.serviceSnapshot?.name || 'Dịch vụ',
         });
         
-        // 🔥 THEN PERSIST NOTIFICATION TO DB (don't wait for it)
+        // Persist notification to DB without blocking response
         this.notificationsService.createNotification(order.taskerId.toString(), {
-          title: 'Khách hàng đã hủy dịch vụ',
-          content: `Đơn hàng ${order.serviceSnapshot?.name || 'Dịch vụ'} đã bị hủy bởi khách hàng ${customerName}.`,
+          title: 'Kh\u00e1ch h\u00e0ng \u0111\u00e3 h\u1ee7y d\u1ecbch v\u1ee5',
+          content: `\u0110\u01a1n h\u00e0ng ${order.serviceSnapshot?.name || 'D\u1ecbch v\u1ee5'} \u0111\u00e3 b\u1ecb h\u1ee7y b\u1edfi kh\u00e1ch h\u00e0ng ${customerName}.`,
           type: 'order_cancelled',
           orderId: order._id.toString(),
           senderId: order.customerId.toString(),
@@ -1053,14 +1052,14 @@ export class OrdersService {
   }
 
   // ==========================
-  // AUTO TIMEOUT - Hủy đơn quá hạn
+  // AUTO TIMEOUT - cancel overdue orders
   // ==========================
   @Cron('*/10 * * * * *')
   async handleTimeoutOrders() {
     const now = new Date();
     const timeoutThreshold = new Date(now.getTime() - OVERDUE_TIMEOUT_DELAY_MS);
 
-    // Tìm những đơn hàng đã quá thời gian kết thúc 15 phút
+    // Find orders whose end time passed the timeout threshold
     const timeoutOrders = await this.orderModel.find({
       status: {
         $in: [
@@ -1074,11 +1073,11 @@ export class OrdersService {
     });
 
     for (const order of timeoutOrders) {
-      // Cập nhật status thành TIMEOUT
+      // Mark the order as timeout
       order.status = OrderStatus.TIMEOUT;
       await order.save();
 
-      // Gọi payment orchestrator để xử lý refund nếu cần
+      // Let the payment orchestrator handle refunds when needed
       try {
         await this.paymentOrchestrator.handleTimeout(order);
       } catch (err) {
@@ -1099,8 +1098,8 @@ export class OrdersService {
       } catch (err) {
         console.warn('Failed to send timeout email to customer', err);
       }
-      // Hoàn tiền cho customer (thêm vào order history hoặc wallet transaction)
-      // Sẽ xử lý qua wallet service nếu cần
+      // Refunds are handled via wallet service or order history entries
+      // No additional action is needed here
 
       // Emit update
       await this.emitOrderUpdateById(order._id as Types.ObjectId);
@@ -1129,23 +1128,23 @@ export class OrdersService {
       throw new BadRequestException('Order is not in timeout state');
     }
 
-    // Chuyển lại về ASSIGNED để tasker có thể tiếp tục làm
+    // Move back to ASSIGNED so the tasker can continue the job
     order.status = OrderStatus.ASSIGNED;
     await order.save();
 
-    // Thông báo cho tasker biết order được giữ lại
+    // Notify the tasker that the order was kept
     if (order.taskerId) {
       try {
-        // 🔥 PERSIST NOTIFICATION + EMIT REALTIME
+        // Persist notification and emit realtime event
         const notification = await this.notificationsService.createNotification(order.taskerId.toString(), {
-          title: 'Đơn hàng được giữ lại',
-          content: `Khách hàng đã quyết định giữ lại đơn hàng đã quá hạn. Vui lòng bắt đầu làm ngay.`,
+          title: '\u0110\u01a1n h\u00e0ng \u0111\u01b0\u1ee3c gi\u1eef l\u1ea1i',
+          content: `Kh\u00e1ch h\u00e0ng \u0111\u00e3 quy\u1ebft \u0111\u1ecbnh gi\u1eef l\u1ea1i \u0111\u01a1n h\u00e0ng \u0111\u00e3 qu\u00e1 h\u1ea1n. Vui l\u00f2ng b\u1eaft \u0111\u1ea7u l\u00e0m ngay.`,
           type: 'order_kept',
           orderId: orderId,
           senderId: order.customerId.toString(),
         });
 
-        // 🔥 FORCE REALTIME TO TASKER
+        // Force realtime to tasker
         if (notification) {
           this.adminGateway.emitOrderKept({
             orderId: order._id.toString(),
@@ -1165,4 +1164,5 @@ export class OrdersService {
     return order;
   }
 }
+
 

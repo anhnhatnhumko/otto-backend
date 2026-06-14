@@ -70,7 +70,7 @@ export class ChatGateway implements OnGatewayConnection {
     const token = tokenFromAuth || tokenFromQuery || tokenFromCookie;
 
     if (!token) {
-      this.logger.debug(`Socket ${client.id} missing token — disconnecting`);
+      this.logger.debug(`Socket ${client.id} missing token - disconnecting`);
       client.disconnect(true);
       return;
     }
@@ -82,7 +82,7 @@ export class ChatGateway implements OnGatewayConnection {
       client.data.user = { userId, role };
       this.logger.debug(`Socket connected user=${userId} role=${role} id=${client.id}`);
     } catch (err) {
-      this.logger.warn(`Socket ${client.id} provided invalid token — disconnecting`);
+      this.logger.warn(`Socket ${client.id} provided invalid token - disconnecting`);
       client.disconnect(true);
       return;
     }
@@ -109,7 +109,7 @@ export class ChatGateway implements OnGatewayConnection {
     const text = String(payload?.text ?? '').trim();
     if (!orderId || !text) return;
 
-    // 🔥 FIX: Get userId and role from client.data (set in handleConnection)
+    // Read userId and role from client.data set during handleConnection
     const senderId = String(client.data.user?.userId ?? '');
     const senderRole = String(client.data.user?.role ?? '');
 
@@ -179,10 +179,10 @@ export class ChatGateway implements OnGatewayConnection {
 
       if (senderRole === 'CUSTOMER') {
         recipientId = safeExtractId(order.taskerId);
-        notificationTitle = `Tin nhắn từ khách hàng`;
+        notificationTitle = `Tin nh\u1eafn t\u1eeb kh\u00e1ch h\u00e0ng`;
       } else if (senderRole === 'TASKER') {
         recipientId = safeExtractId(order.customerId);
-        notificationTitle = `Tin nhắn từ người thực hiện`;
+        notificationTitle = `Tin nh\u1eafn t\u1eeb ng\u01b0\u1eddi th\u1ef1c hi\u1ec7n`;
       }
 
       if (!recipientId) {
@@ -211,3 +211,4 @@ export class ChatGateway implements OnGatewayConnection {
     return msg;
   }
 }
+

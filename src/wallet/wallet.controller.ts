@@ -35,7 +35,10 @@ export class WalletController {
     console.log('ðŸ”¥ CONTROLLER HIT DEPOSIT');
     console.log('ðŸ”¥ BODY:', dto);
     console.log('ðŸ”¥ USER:', req.user);
-    return this.walletService.deposit(req.user.userId, dto.amount);
+    return this.walletService.deposit(req.user.userId, dto.amount, {
+      successUrl: dto.successUrl,
+      cancelUrl: dto.cancelUrl,
+    });
   }
 
   // MOCK webhook/test

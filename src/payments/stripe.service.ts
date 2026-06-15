@@ -6,6 +6,8 @@ type CreateCheckoutSessionParams = {
   amount: number;
   metadata: Record<string, string>;
   name: string;
+  successUrl?: string;
+  cancelUrl?: string;
 };
 
 @Injectable()
@@ -28,13 +30,15 @@ export class StripeService {
     amount,
     metadata,
     name,
+    successUrl: customSuccessUrl,
+    cancelUrl: customCancelUrl,
   }: CreateCheckoutSessionParams) {
-    const frontendUrl = resolvePublicUrl(
-      process.env.FRONTEND_URL,
-      process.env.BACKEND_URL,
-    );
+    const shouldResolveDefaultUrls = !customSuccessUrl || !customCancelUrl;
+    const frontendUrl = shouldResolveDefaultUrls
+      ? resolvePublicUrl(process.env.FRONTEND_URL, process.env.BACKEND_URL)
+      : '';
 
-    if (!frontendUrl) {
+    if (shouldResolveDefaultUrls && !frontendUrl) {
       throw new Error('FRONTEND_URL is not configured');
     }
 
@@ -42,15 +46,18 @@ export class StripeService {
     const orderId = metadata?.orderId;
     const transactionId = metadata?.transactionId;
 
-    const successUrl =
+    const defaultSuccessUrl =
       metadataType === 'WALLET'
         ? `${frontendUrl}/deposit/success?transactionId=${encodeURIComponent(transactionId || '')}&source=wallet&session_id={CHECKOUT_SESSION_ID}`
         : `${frontendUrl}/payment/success?orderId=${encodeURIComponent(orderId || '')}&source=stripe&session_id={CHECKOUT_SESSION_ID}`;
 
-    const cancelUrl =
+    const defaultCancelUrl =
       metadataType === 'WALLET'
         ? `${frontendUrl}/deposit`
         : `${frontendUrl}/payment/cancel`;
+
+    const successUrl = String(customSuccessUrl || '').trim() || defaultSuccessUrl;
+    const cancelUrl = String(customCancelUrl || '').trim() || defaultCancelUrl;
 
     const session = await this.stripe.checkout.sessions.create({
       payment_method_types: ['card'],
@@ -74,6 +81,7 @@ export class StripeService {
 
     return {
       checkoutUrl: session.url,
+      sessionId: session.id,
     };
   }
 

@@ -62,4 +62,10 @@ export class PaymentController {
     const { redirectUrl } = await this.paymentService.confirmStripeSession(sessionId);
     return res.redirect(redirectUrl);
   }
+
+  @Get('stripe/confirm')
+  @Public()
+  async confirmStripeSession(@Query('session_id') sessionId: string) {
+    return this.paymentService.confirmStripeSession(sessionId);
+  }
 }

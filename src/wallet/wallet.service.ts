@@ -35,6 +35,40 @@ export class WalletService {
     private stripeService: StripeService,
   ) {}
 
+  private appendQueryParams(
+    rawUrl: string,
+    params: Record<string, string | undefined>,
+  ) {
+    const url = String(rawUrl || '').trim();
+
+    if (!url) {
+      return '';
+    }
+
+    const queryEntries = Object.entries(params).filter(([, value]) =>
+      Boolean(String(value ?? '').trim()),
+    );
+
+    if (queryEntries.length === 0) {
+      return url;
+    }
+
+    const separator = url.includes('?') ? '&' : '?';
+    const query = queryEntries
+      .map(([key, value]) => {
+        const rawValue = String(value ?? '');
+        const encodedValue =
+          rawValue === '{CHECKOUT_SESSION_ID}'
+            ? rawValue
+            : encodeURIComponent(rawValue);
+
+        return `${encodeURIComponent(key)}=${encodedValue}`;
+      })
+      .join('&');
+
+    return `${url}${separator}${query}`;
+  }
+
   async getWallet(userId: string) {
     return this.walletModel.findOneAndUpdate(
       { userId: new Types.ObjectId(userId) },
@@ -49,7 +83,14 @@ export class WalletService {
     );
   }
 
-  async deposit(userId: string, amount: number) {
+  async deposit(
+    userId: string,
+    amount: number,
+    options?: {
+      successUrl?: string;
+      cancelUrl?: string;
+    },
+  ) {
     console.log('WALLET DEPOSIT:', { userId, amount });
     const externalId = `STRIPE_${Date.now()}`;
 
@@ -69,11 +110,27 @@ export class WalletService {
         type: 'WALLET',
         transactionId: tx._id.toString(),
       },
+      successUrl: options?.successUrl
+        ? this.appendQueryParams(options.successUrl, {
+            paymentStatus: 'success',
+            transactionId: tx._id.toString(),
+            source: 'wallet',
+            session_id: '{CHECKOUT_SESSION_ID}',
+          })
+        : undefined,
+      cancelUrl: options?.cancelUrl
+        ? this.appendQueryParams(options.cancelUrl, {
+            paymentStatus: 'cancel',
+            transactionId: tx._id.toString(),
+            source: 'wallet',
+          })
+        : undefined,
     });
 
     return {
       checkoutUrl: session.checkoutUrl,
       transactionId: tx._id,
+      sessionId: session.sessionId,
     };
   }
 

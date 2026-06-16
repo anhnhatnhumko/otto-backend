@@ -268,13 +268,11 @@ export class NotificationsService {
     };
 
     const notification = new this.notificationModel(payload);
+    const realtimeNotification = normalizeNotificationRecord(notification.toObject());
+
+    this.notificationsGateway.emitToUser(userId, realtimeNotification);
+
     const saved = await notification.save();
-
-    this.notificationsGateway.emitToUser(
-      userId,
-      normalizeNotificationRecord(saved.toObject()),
-    );
-
     return saved;
   }
 

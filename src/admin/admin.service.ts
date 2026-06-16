@@ -93,7 +93,7 @@ export class AdminService {
 
         // Validate required fields
         if (!name || !email || !phone || !provinceId || !wardId) {
-            throw new BadRequestException('Vui lòng điền đầy đủ thông tin bắt buộc');
+            throw new BadRequestException('Vui lÃƒÂ²ng Ã„â€˜iÃ¡Â»Ân Ã„â€˜Ã¡ÂºÂ§y Ã„â€˜Ã¡Â»Â§ thÃƒÂ´ng tin bÃ¡ÂºÂ¯t buÃ¡Â»â„¢c');
         }
 
         // Check if email or phone already exists
@@ -102,7 +102,7 @@ export class AdminService {
         });
 
         if (exists) {
-            throw new BadRequestException('Email hoặc số điện thoại đã được sử dụng');
+            throw new BadRequestException('Email hoÃ¡ÂºÂ·c sÃ¡Â»â€˜ Ã„â€˜iÃ¡Â»â€¡n thoÃ¡ÂºÂ¡i Ã„â€˜ÃƒÂ£ Ã„â€˜Ã†Â°Ã¡Â»Â£c sÃ¡Â»Â­ dÃ¡Â»Â¥ng');
         }
 
         // Generate a temporary password
@@ -126,7 +126,7 @@ export class AdminService {
         });
 
         return {
-            message: 'Tasker được thêm thành công',
+            message: 'Tasker Ã„â€˜Ã†Â°Ã¡Â»Â£c thÃƒÂªm thÃƒÂ nh cÃƒÂ´ng',
             tasker: {
                 id: user._id,
                 name: user.fullName,
@@ -158,7 +158,7 @@ export class AdminService {
         if (!email) requiredFieldErrors.email = 'Vui lòng nhập email';
         if (!phone) requiredFieldErrors.phone = 'Vui lòng nhập số điện thoại';
         if (!provinceId) requiredFieldErrors.provinceId = 'Vui lòng chọn tỉnh';
-        if (!wardId) requiredFieldErrors.wardId = 'Vui lòng chọn quận/huyện';
+        if (!wardId) requiredFieldErrors.wardId = 'Vui lòng chọn phường/xã';
         if (serviceIds.length === 0) {
             requiredFieldErrors.services = 'Vui lòng chọn ít nhất 1 dịch vụ';
         }
@@ -177,7 +177,7 @@ export class AdminService {
         }
 
         if (!Types.ObjectId.isValid(wardId)) {
-            invalidObjectIdErrors.wardId = 'Quận/huyện không hợp lệ';
+            invalidObjectIdErrors.wardId = 'Phường/xã không hợp lệ';
         }
 
         if (serviceIds.some((serviceId) => !Types.ObjectId.isValid(serviceId))) {
@@ -214,7 +214,7 @@ export class AdminService {
             if (duplicateFieldErrors.email && duplicateFieldErrors.phone) {
                 duplicateMessage = 'Email và số điện thoại đã tồn tại trong hệ thống.';
             } else if (duplicateFieldErrors.email) {
-                duplicateMessage = 'Email đã tồn tại .';
+                duplicateMessage = 'Email đã tồn tại.';
             } else if (duplicateFieldErrors.phone) {
                 duplicateMessage = 'Số điện thoại đã tồn tại.';
             }
@@ -249,6 +249,8 @@ export class AdminService {
         const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
         const avatarUrl = String(dto?.avatarUrl ?? dto?.avatar ?? '').trim() || undefined;
+        const shouldSendCredentialsEmail =
+            String(dto?.sendCredentialsEmail ?? 'true').trim().toLowerCase() !== 'false';
 
         const userPayload: any = {
             email,
@@ -273,28 +275,41 @@ export class AdminService {
 
         this.adminGateway.emitTaskerUpdated(user);
 
-        // 🔥 Gửi email thông báo tài khoản mới cho tasker
-        try {
-            console.log('🔥 [Admin Service] Đang gửi email tasker mới:', email);
-            await this.mailService.sendTaskerAccountCreatedEmail(
-                email,
-                user.fullName,
-                tempPassword,
-            );
-            console.log('✅ [Admin Service] Email tasker mới đã gửi thành công');
-        } catch (err) {
-            console.error('❌ Lỗi gửi email cho tasker mới:', err);
-            // Không throw error, vì tài khoản đã được tạo thành công
+        let credentialsEmailSent: boolean | null = null;
+        let credentialsEmailMessage = '';
+
+        if (shouldSendCredentialsEmail) {
+            try {
+                console.log('🔥 [Admin Service] Đang gửi email tasker mới:', email);
+                await this.mailService.sendTaskerAccountCreatedEmail(
+                    email,
+                    user.fullName,
+                    tempPassword,
+                );
+                credentialsEmailSent = true;
+                credentialsEmailMessage = 'Đã gửi email thông tin đăng nhập cho tasker.';
+                console.log('✅ [Admin Service] Email tasker mới đã gửi thành công');
+            } catch (err) {
+                credentialsEmailSent = false;
+                credentialsEmailMessage =
+                    err instanceof Error
+                        ? err.message
+                        : 'Không thể gửi email thông tin đăng nhập cho tasker.';
+                console.error('❌ Lỗi gửi email cho tasker mới:', err);
+            }
         }
 
         return {
             message: 'Tasker được thêm thành công',
+            credentialsEmailSent,
+            credentialsEmailMessage,
             tasker: {
                 id: user._id,
                 name: user.fullName,
                 email: user.email,
                 phone: user.phone,
                 tempPassword,
+                credentialsEmailSent,
             },
         };
     }
@@ -438,7 +453,7 @@ export class AdminService {
                     customerId: u._id,
                 });
 
-                // Tính tổng chi tiêu cho CUSTOMER
+                // TÃƒÂ­nh tÃ¡Â»â€¢ng chi tiÃƒÂªu cho CUSTOMER
                 let totalSpent = 0;
                 if (role === 'CUSTOMER') {
                     const result = await this.orderModel.aggregate([
@@ -448,7 +463,7 @@ export class AdminService {
                     totalSpent = result[0]?.total ?? 0;
                 }
 
-                // Tính earnings cho TASKER từ completed orders
+                // TÃƒÂ­nh earnings cho TASKER tÃ¡Â»Â« completed orders
                 let earnings = 0;
                 if (role === 'TASKER') {
                     const result = await this.orderModel.aggregate([
@@ -458,7 +473,7 @@ export class AdminService {
                     earnings = result[0]?.total ?? 0;
                 }
 
-                // Build address từ province + ward
+                // Build address tÃ¡Â»Â« province + ward
                 const provinceName = (u.provinceId as any)?.name || "";
                 const wardName = (u.wardId as any)?.name || "";
                 const address = buildFullAddress(provinceName, wardName);
@@ -530,7 +545,7 @@ export class AdminService {
             verified: true,
         };
 
-        // 🔥 EMIT REALTIME
+        // Ã°Å¸â€Â¥ EMIT REALTIME
         this.adminGateway.emitTaskerUpdated(mapped);
 
         return mapped;
@@ -556,11 +571,11 @@ export class AdminService {
         this.adminGateway.emitForceLogout(user._id.toString(), {
             reason: 'ACCOUNT_BANNED',
             message:
-                'Tài khoản Tasker của bạn đã bị khóa bởi quản trị viên. Vui lòng liên hệ hỗ trợ để biết thêm chi tiết.',
+                'TÃƒÂ i khoÃ¡ÂºÂ£n Tasker cÃ¡Â»Â§a bÃ¡ÂºÂ¡n Ã„â€˜ÃƒÂ£ bÃ¡Â»â€¹ khÃƒÂ³a bÃ¡Â»Å¸i quÃ¡ÂºÂ£n trÃ¡Â»â€¹ viÃƒÂªn. Vui lÃƒÂ²ng liÃƒÂªn hÃ¡Â»â€¡ hÃ¡Â»â€” trÃ¡Â»Â£ Ã„â€˜Ã¡Â»Æ’ biÃ¡ÂºÂ¿t thÃƒÂªm chi tiÃ¡ÂºÂ¿t.',
         });
 
         void this.mailService
-            .sendAccountBannedEmail(user.email, user.fullName || 'bạn', user.role)
+            .sendAccountBannedEmail(user.email, user.fullName || 'bÃ¡ÂºÂ¡n', user.role)
             .catch((err) => {
                 console.warn('Failed to send banned account email to tasker', err);
             });
@@ -616,11 +631,11 @@ export class AdminService {
         this.adminGateway.emitForceLogout(user._id.toString(), {
             reason: 'ACCOUNT_BANNED',
             message:
-                'Tài khoản của bạn đã bị khóa bởi quản trị viên. Vui lòng liên hệ hỗ trợ để biết thêm chi tiết.',
+                'TÃƒÂ i khoÃ¡ÂºÂ£n cÃ¡Â»Â§a bÃ¡ÂºÂ¡n Ã„â€˜ÃƒÂ£ bÃ¡Â»â€¹ khÃƒÂ³a bÃ¡Â»Å¸i quÃ¡ÂºÂ£n trÃ¡Â»â€¹ viÃƒÂªn. Vui lÃƒÂ²ng liÃƒÂªn hÃ¡Â»â€¡ hÃ¡Â»â€” trÃ¡Â»Â£ Ã„â€˜Ã¡Â»Æ’ biÃ¡ÂºÂ¿t thÃƒÂªm chi tiÃ¡ÂºÂ¿t.',
         });
 
         void this.mailService
-            .sendAccountBannedEmail(user.email, user.fullName || 'bạn', user.role)
+            .sendAccountBannedEmail(user.email, user.fullName || 'bÃ¡ÂºÂ¡n', user.role)
             .catch((err) => {
                 console.warn('Failed to send banned account email to user', err);
             });
@@ -657,12 +672,12 @@ export class AdminService {
             .lean()) as any;
         if (!user) return;
 
-        // Tính order count
+        // TÃƒÂ­nh order count
         const orderCount = await this.orderModel.countDocuments({
             customerId: user._id,
         });
 
-        // Tính totalSpent cho CUSTOMER
+        // TÃƒÂ­nh totalSpent cho CUSTOMER
         let totalSpent = 0;
         if (user.role === 'CUSTOMER') {
             const result = await this.orderModel.aggregate([
@@ -672,7 +687,7 @@ export class AdminService {
             totalSpent = result[0]?.total ?? 0;
         }
 
-        // Tính earnings cho TASKER từ completed orders
+        // TÃƒÂ­nh earnings cho TASKER tÃ¡Â»Â« completed orders
         let earnings = 0;
         if (user.role === 'TASKER') {
             const result = await this.orderModel.aggregate([
@@ -682,7 +697,7 @@ export class AdminService {
             earnings = result[0]?.total ?? 0;
         }
 
-                // Build address từ province + ward
+                // Build address tÃ¡Â»Â« province + ward
                 const provinceName = user.provinceId?.name || "";
                 const wardName = user.wardId?.name || "";
                 const address = buildFullAddress(provinceName, wardName);

@@ -35,6 +35,25 @@ export class WalletService {
     private stripeService: StripeService,
   ) {}
 
+  private async invalidatePendingWithdrawOtpTransactions(userObjectId: Types.ObjectId) {
+    await this.txModel.updateMany(
+      {
+        userId: userObjectId,
+        type: TransactionType.WITHDRAW,
+        paymentMethod: 'BANK',
+        status: TransactionStatus.PENDING,
+      },
+      {
+        $set: {
+          status: TransactionStatus.FAILED,
+          otpCode: '',
+          otpExpires: new Date(),
+          isOtpVerified: false,
+        },
+      },
+    );
+  }
+
   private appendQueryParams(
     rawUrl: string,
     params: Record<string, string | undefined>,
@@ -274,6 +293,8 @@ export class WalletService {
     if (!user?.email) {
       throw new NotFoundException('User email not found');
     }
+
+    await this.invalidatePendingWithdrawOtpTransactions(userObjectId);
 
     const otp = generateOtp();
 

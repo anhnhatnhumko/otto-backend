@@ -38,6 +38,29 @@ export class PaymentOrchestratorService {
         // private readonly orderService: OrdersService,
     ) { }
 
+    private async invalidatePendingWalletOtpTransactions(
+        userId: string,
+        orderId: string,
+    ) {
+        await this.txModel.updateMany(
+            {
+                userId: new Types.ObjectId(userId),
+                orderId: new Types.ObjectId(orderId),
+                type: TransactionType.PAYMENT,
+                paymentMethod: 'WALLET',
+                status: TransactionStatus.PENDING,
+            },
+            {
+                $set: {
+                    status: TransactionStatus.FAILED,
+                    otpCode: '',
+                    otpExpires: new Date(),
+                    isOtpVerified: false,
+                },
+            },
+        );
+    }
+
     // WALLET PAYMENT
     // async payWithWallet(userId: string, orderId: string, amount: number) {
     //     await this.walletService.payOrder(userId, orderId, amount);
@@ -55,6 +78,8 @@ export class PaymentOrchestratorService {
         if (order.status !== OrderStatus.PENDING_PAYMENT) {
             throw new BadRequestException('Invalid order state');
         }
+
+        await this.invalidatePendingWalletOtpTransactions(userId, orderId);
 
         const otp = generateOtp();
 
@@ -163,11 +188,32 @@ export class PaymentOrchestratorService {
         return;
     }
     async verifyWalletPayment(userId: string, txId: string, otp: string) {
-        const tx = await this.txModel.findById(txId);
+        const normalizedOtp = String(otp ?? '').trim();
+
+        if (normalizedOtp.length !== 6) {
+            throw new BadRequestException('OTP không hợp lệ');
+        }
+
+        const tx = await this.txModel.findOne({
+            _id: new Types.ObjectId(txId),
+            userId: new Types.ObjectId(userId),
+            type: TransactionType.PAYMENT,
+            paymentMethod: 'WALLET',
+        });
 
         if (!tx) throw new NotFoundException();
 
-        // validate OTP ...
+        if (tx.status !== TransactionStatus.PENDING) {
+            throw new BadRequestException('Giao dịch OTP không còn hiệu lực');
+        }
+
+        if (!tx.otpCode || tx.otpCode !== normalizedOtp) {
+            throw new BadRequestException('OTP không hợp lệ');
+        }
+
+        if (!tx.otpExpires || tx.otpExpires.getTime() < Date.now()) {
+            throw new BadRequestException('OTP đã hết hạn');
+        }
 
         const amount = Math.abs(tx.amount);
 
@@ -179,6 +225,9 @@ export class PaymentOrchestratorService {
         });
 
         tx.status = TransactionStatus.SUCCESS;
+        tx.isOtpVerified = true;
+        tx.otpCode = '';
+        tx.otpExpires = new Date();
         await tx.save();
 
         const order = await this.orderService.markAsPaid(
